@@ -40,12 +40,13 @@ export const authOptions: NextAuthOptions = {
                 });
 
                 if (!user) {
-                    // Auto-create user as PARTICIPANT for demo purposes
+                    // Only host@hackos.app gets HOST role, everyone else is PARTICIPANT
+                    const role = credentials.email === "host@hackos.app" ? "HOST" : "PARTICIPANT";
                     const newUser = await prisma.user.create({
                         data: {
                             email: credentials.email,
                             name: credentials.email.split("@")[0],
-                            role: "PARTICIPANT",
+                            role,
                         },
                     });
                     return {

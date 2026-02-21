@@ -6,17 +6,21 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { FadeIn } from "@/components/animations/FadeIn";
-import { Gift, Download, Search, Loader2, ChevronDown } from "lucide-react";
+import {
+    Gift, Download, Search, Loader2, ChevronDown,
+    UserCheck, Package,
+} from "lucide-react";
 import { Input } from "@/components/ui/input";
 
 export default function GoodiesPage() {
     const [search, setSearch] = useState("");
-    const [goodies, setGoodies] = useState<any[]>([]);
+    const [participants, setParticipants] = useState<any[]>([]);
     const [loading, setLoading] = useState(true);
     const [events, setEvents] = useState<any[]>([]);
     const [eventId, setEventId] = useState<string | null>(null);
     const [eventTitle, setEventTitle] = useState("");
     const [showEventPicker, setShowEventPicker] = useState(false);
+    const [distributing, setDistributing] = useState<string | null>(null);
 
     // Fetch events and auto-select first
     useEffect(() => {
@@ -35,44 +39,67 @@ export default function GoodiesPage() {
             .catch(() => setLoading(false));
     }, []);
 
-    // Fetch goodies when event changes
-    const fetchGoodies = useCallback(async () => {
+    // Fetch checked-in participants for the selected event
+    const fetchCheckedIn = useCallback(async () => {
         if (!eventId) return;
         setLoading(true);
         try {
-            const res = await fetch(`/api/goodies?eventId=${eventId}`);
+            const res = await fetch(`/api/goodies/checkedin?eventId=${eventId}`);
             if (res.ok) {
                 const data = await res.json();
-                setGoodies(Array.isArray(data) ? data : []);
+                setParticipants(Array.isArray(data) ? data : []);
             }
         } catch { }
         setLoading(false);
     }, [eventId]);
 
     useEffect(() => {
-        if (eventId) fetchGoodies();
-    }, [eventId, fetchGoodies]);
+        if (eventId) fetchCheckedIn();
+    }, [eventId, fetchCheckedIn]);
 
-    const filteredGoodies = goodies.filter((g) => {
+    // Give goodie to a participant
+    const giveGoodie = async (participantId: string) => {
+        setDistributing(participantId);
+        try {
+            const res = await fetch("/api/goodies", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    participantId,
+                    eventId,
+                    item: "Goodie Pack",
+                }),
+            });
+            if (res.ok) {
+                fetchCheckedIn(); // Refresh the list
+            }
+        } catch { }
+        setDistributing(null);
+    };
+
+    // Filter participants by search
+    const filtered = participants.filter((p) => {
         if (!search) return true;
         const s = search.toLowerCase();
         return (
-            g.participant?.user?.name?.toLowerCase().includes(s) ||
-            g.participant?.user?.email?.toLowerCase().includes(s) ||
-            g.item?.toLowerCase().includes(s)
+            p.user?.name?.toLowerCase().includes(s) ||
+            p.user?.email?.toLowerCase().includes(s)
         );
     });
 
+    const checkedInCount = filtered.length;
+    const goodieGivenCount = filtered.filter((p) => p.goodieReceived).length;
+
     const exportCSV = () => {
         const csv = [
-            ["Name", "Email", "Item", "Given At", "Given By"].join(","),
-            ...goodies.map((g) =>
+            ["Name", "Email", "Checked In", "Goodie Received", "Team"].join(","),
+            ...filtered.map((p) =>
                 [
-                    g.participant?.user?.name || "",
-                    g.participant?.user?.email || "",
-                    g.item || "",
-                    new Date(g.givenAt).toLocaleString(),
-                    g.givenByHost?.name || "",
+                    p.user?.name || "",
+                    p.user?.email || "",
+                    p.isPresent ? "Yes" : "No",
+                    p.goodieReceived ? "Yes" : "No",
+                    p.registration?.teamName || "Solo",
                 ].join(",")
             ),
         ].join("\n");
@@ -98,7 +125,7 @@ export default function GoodiesPage() {
                                 Goodies Tracker
                             </h1>
                             <p className="text-zinc-400 mt-1">
-                                Track goodie distribution to participants
+                                Checked-in participants & goodie distribution
                                 {eventTitle && <span className="text-purple-400"> — {eventTitle}</span>}
                             </p>
                         </div>
@@ -132,7 +159,7 @@ export default function GoodiesPage() {
                                     )}
                                 </div>
                             )}
-                            <Button variant="outline" size="sm" onClick={exportCSV} disabled={goodies.length === 0}>
+                            <Button variant="outline" size="sm" onClick={exportCSV} disabled={participants.length === 0}>
                                 <Download className="h-4 w-4 mr-2" />
                                 Export CSV
                             </Button>
@@ -140,11 +167,39 @@ export default function GoodiesPage() {
                     </div>
                 </FadeIn>
 
+                {/* Stats summary */}
+                {!loading && participants.length > 0 && (
+                    <div className="grid grid-cols-2 gap-4 mb-6">
+                        <Card className="bg-[#111111] border-white/5">
+                            <CardContent className="pt-4 pb-4 flex items-center gap-3">
+                                <div className="p-2.5 rounded-lg bg-emerald-500/10">
+                                    <UserCheck className="h-5 w-5 text-emerald-400" />
+                                </div>
+                                <div>
+                                    <p className="text-2xl font-bold text-emerald-400">{checkedInCount}</p>
+                                    <p className="text-xs text-zinc-500">Checked In</p>
+                                </div>
+                            </CardContent>
+                        </Card>
+                        <Card className="bg-[#111111] border-white/5">
+                            <CardContent className="pt-4 pb-4 flex items-center gap-3">
+                                <div className="p-2.5 rounded-lg bg-purple-500/10">
+                                    <Package className="h-5 w-5 text-purple-400" />
+                                </div>
+                                <div>
+                                    <p className="text-2xl font-bold text-purple-400">{goodieGivenCount}</p>
+                                    <p className="text-xs text-zinc-500">Goodies Distributed</p>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </div>
+                )}
+
                 <div className="mb-6">
                     <div className="relative">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
                         <Input
-                            placeholder="Search participants or items..."
+                            placeholder="Search participants..."
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
                             className="pl-10 bg-[#111111] border-white/10"
@@ -156,39 +211,62 @@ export default function GoodiesPage() {
                     <div className="flex justify-center py-20">
                         <Loader2 className="h-8 w-8 animate-spin text-purple-500" />
                     </div>
-                ) : filteredGoodies.length === 0 ? (
+                ) : filtered.length === 0 ? (
                     <Card className="bg-[#111111] border-white/5">
                         <CardContent className="flex flex-col items-center py-16">
                             <Gift className="h-12 w-12 text-zinc-600 mb-4" />
-                            <p className="text-zinc-400">No goodies distributed yet</p>
+                            <p className="text-zinc-400">No checked-in participants yet</p>
                             <p className="text-zinc-500 text-sm mt-1">
-                                Use the QR scanner to distribute goodies to checked-in participants
+                                Use the QR scanner to check in participants first
                             </p>
                         </CardContent>
                     </Card>
                 ) : (
                     <div className="space-y-3">
-                        <p className="text-sm text-zinc-400 mb-2">{filteredGoodies.length} item(s) distributed</p>
-                        {filteredGoodies.map((g, i) => (
-                            <Card key={g.id || i} className="bg-[#111111] border-white/5 hover:border-white/10 transition-all">
+                        {filtered.map((p, i) => (
+                            <Card key={p.id} className="bg-[#111111] border-white/5 hover:border-white/10 transition-all">
                                 <CardContent className="p-4">
                                     <div className="flex items-center justify-between">
                                         <div className="flex items-center gap-4">
                                             <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-cyan-500 flex items-center justify-center text-sm font-bold">
-                                                {g.participant?.user?.name?.[0] || "?"}
+                                                {p.user?.name?.[0] || "?"}
                                             </div>
                                             <div>
-                                                <p className="font-medium">{g.participant?.user?.name || "Unknown"}</p>
-                                                <p className="text-sm text-zinc-500">{g.participant?.user?.email}</p>
+                                                <div className="flex items-center gap-2">
+                                                    <p className="font-medium">{p.user?.name || "Unknown"}</p>
+                                                    {p.registration?.teamName && (
+                                                        <span className="text-xs text-cyan-400">({p.registration.teamName})</span>
+                                                    )}
+                                                </div>
+                                                <p className="text-sm text-zinc-500">{p.user?.email}</p>
                                             </div>
                                         </div>
-                                        <div className="text-right">
-                                            <Badge variant="success">{g.item}</Badge>
-                                            <p className="text-xs text-zinc-500 mt-1">
-                                                {new Date(g.givenAt).toLocaleString()}
-                                            </p>
-                                            {g.givenByHost?.name && (
-                                                <p className="text-xs text-zinc-600">by {g.givenByHost.name}</p>
+                                        <div className="flex items-center gap-3">
+                                            <Badge variant="success" className="text-xs">
+                                                <UserCheck className="h-3 w-3 mr-1" />
+                                                Present
+                                            </Badge>
+                                            {p.goodieReceived ? (
+                                                <Badge className="bg-purple-500/20 text-purple-300 text-xs">
+                                                    <Gift className="h-3 w-3 mr-1" />
+                                                    Received
+                                                </Badge>
+                                            ) : (
+                                                <Button
+                                                    size="sm"
+                                                    variant="gradient"
+                                                    onClick={() => giveGoodie(p.id)}
+                                                    disabled={distributing === p.id}
+                                                >
+                                                    {distributing === p.id ? (
+                                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                                    ) : (
+                                                        <>
+                                                            <Gift className="h-3.5 w-3.5 mr-1" />
+                                                            Give Goodie
+                                                        </>
+                                                    )}
+                                                </Button>
                                             )}
                                         </div>
                                     </div>
