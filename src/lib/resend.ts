@@ -3,38 +3,38 @@ import { Resend } from 'resend';
 const resend = new Resend(process.env.RESEND_API_KEY);
 
 export async function sendEmail({
-    to,
-    subject,
-    html,
+  to,
+  subject,
+  html,
 }: {
-    to: string;
-    subject: string;
-    html: string;
+  to: string;
+  subject: string;
+  html: string;
 }) {
-    try {
-        if (!process.env.RESEND_API_KEY) {
-            console.log(`[EMAIL MOCK] To: ${to}, Subject: ${subject}`);
-            console.log(`[EMAIL MOCK] Body: ${html.substring(0, 200)}...`);
-            return { success: true, mock: true };
-        }
-
-        const data = await resend.emails.send({
-            from: 'Hackos <noreply@hackos.app>',
-            to,
-            subject,
-            html,
-        });
-
-        return { success: true, data };
-    } catch (error) {
-        console.error('Email send error:', error);
-        return { success: false, error };
+  try {
+    if (!process.env.RESEND_API_KEY) {
+      console.log(`[EMAIL MOCK] To: ${to}, Subject: ${subject}`);
+      console.log(`[EMAIL MOCK] Body: ${html.substring(0, 200)}...`);
+      return { success: true, mock: true };
     }
+
+    const data = await resend.emails.send({
+      from: 'Hackos <onboarding@resend.dev>',
+      to,
+      subject,
+      html,
+    });
+
+    return { success: true, data };
+  } catch (error) {
+    console.error('Email send error:', error);
+    return { success: false, error };
+  }
 }
 
 // Email Templates
 export function registrationConfirmationEmail(name: string, eventTitle: string) {
-    return `
+  return `
     <!DOCTYPE html>
     <html>
     <head><meta charset="utf-8"></head>
@@ -66,7 +66,7 @@ export function registrationConfirmationEmail(name: string, eventTitle: string) 
 }
 
 export function approvalEmail(name: string, eventTitle: string, qrCodeUrl: string) {
-    return `
+  return `
     <!DOCTYPE html>
     <html>
     <head><meta charset="utf-8"></head>
@@ -98,7 +98,7 @@ export function approvalEmail(name: string, eventTitle: string, qrCodeUrl: strin
 }
 
 export function rejectionEmail(name: string, eventTitle: string) {
-    return `
+  return `
     <!DOCTYPE html>
     <html>
     <head><meta charset="utf-8"></head>
@@ -131,7 +131,7 @@ export function rejectionEmail(name: string, eventTitle: string) {
 }
 
 export function judgeInviteEmail(eventTitle: string, loginUrl: string) {
-    return `
+  return `
     <!DOCTYPE html>
     <html>
     <head><meta charset="utf-8"></head>
@@ -159,7 +159,7 @@ export function judgeInviteEmail(eventTitle: string, loginUrl: string) {
 }
 
 export function announcementEmail(eventTitle: string, title: string, body: string) {
-    return `
+  return `
     <!DOCTYPE html>
     <html>
     <head><meta charset="utf-8"></head>
@@ -184,7 +184,7 @@ export function announcementEmail(eventTitle: string, title: string, body: strin
 }
 
 export function networkingMatchEmail(name: string, matchName: string, matchBio: string, matchLinkedin: string) {
-    return `
+  return `
     <!DOCTYPE html>
     <html>
     <head><meta charset="utf-8"></head>

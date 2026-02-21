@@ -38,9 +38,8 @@ export default function ScanPage() {
         e.preventDefault();
         if (!searchQuery.trim()) return;
         setSearching(true);
-        // In a real app, add a search API. For now, use QR token search
         try {
-            const res = await fetch(`/api/qr?token=${searchQuery.trim()}`);
+            const res = await fetch(`/api/qr?search=${encodeURIComponent(searchQuery.trim())}`);
             if (res.ok) {
                 const participant = await res.json();
                 setScannedParticipant(participant);
