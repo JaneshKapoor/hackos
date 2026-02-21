@@ -4,16 +4,33 @@ import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { slugify } from "@/lib/utils";
 
-// GET: Fetch events
+// GET: Fetch events with full stats
 export async function GET() {
     try {
+        const session = await getServerSession(authOptions);
+        const userId = (session?.user as any)?.id;
+
+        const where: any = { isPublished: true };
+        // If host, show their events; otherwise show all published
+        if (userId && (session?.user as any)?.role === "HOST") {
+            where.hostId = userId;
+        }
+
         const events = await prisma.event.findMany({
-            where: { isPublished: true },
+            where,
             include: {
                 _count: {
                     select: {
                         registrations: true,
                         submissions: true,
+                    },
+                },
+                registrations: {
+                    select: {
+                        status: true,
+                        participants: {
+                            select: { isPresent: true },
+                        },
                     },
                 },
                 host: {
@@ -23,8 +40,27 @@ export async function GET() {
             orderBy: { startDate: "desc" },
         });
 
-        return NextResponse.json(events);
+        // Compute stats for each event
+        const eventsWithStats = events.map((event) => {
+            const approved = event.registrations.filter((r) => r.status === "APPROVED").length;
+            const pending = event.registrations.filter((r) => r.status === "PENDING").length;
+            const checkedIn = event.registrations.reduce(
+                (acc, r) => acc + r.participants.filter((p) => p.isPresent).length, 0
+            );
+            const teams = event.registrations.filter((r) => r.participants.length > 1).length;
+
+            // Remove raw registrations from response to keep it clean
+            const { registrations, ...rest } = event;
+
+            return {
+                ...rest,
+                stats: { approved, pending, checkedIn, teams },
+            };
+        });
+
+        return NextResponse.json(eventsWithStats);
     } catch (error) {
+        console.error("Events fetch error:", error);
         return NextResponse.json({ error: "Failed to fetch events" }, { status: 500 });
     }
 }

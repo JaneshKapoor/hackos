@@ -131,14 +131,21 @@ export default function DashboardPage() {
         setCreating(false);
     };
 
-    // Demo stats
+    // Compute real stats from events
+    const totalRegistrations = events.reduce((acc, e) => acc + (e._count?.registrations || 0), 0);
+    const totalApproved = events.reduce((acc, e) => acc + (e.stats?.approved || 0), 0);
+    const totalCheckedIn = events.reduce((acc, e) => acc + (e.stats?.checkedIn || 0), 0);
+    const totalSubmissions = events.reduce((acc, e) => acc + (e._count?.submissions || 0), 0);
+    const totalPending = events.reduce((acc, e) => acc + (e.stats?.pending || 0), 0);
+    const totalTeams = events.reduce((acc, e) => acc + (e.stats?.teams || 0), 0);
+
     const stats = [
-        { label: "Total Registrations", value: events.reduce((acc, e) => acc + (e._count?.registrations || 0), 0), icon: Users, color: "text-purple-400", bg: "bg-purple-500/10" },
-        { label: "Approved", value: 0, icon: CheckCircle, color: "text-emerald-400", bg: "bg-emerald-500/10" },
-        { label: "Checked In", value: 0, icon: UserCheck, color: "text-cyan-400", bg: "bg-cyan-500/10" },
-        { label: "Submissions", value: events.reduce((acc, e) => acc + (e._count?.submissions || 0), 0), icon: Code, color: "text-yellow-400", bg: "bg-yellow-500/10" },
-        { label: "Pending Review", value: 0, icon: Clock, color: "text-orange-400", bg: "bg-orange-500/10" },
-        { label: "Teams", value: 0, icon: UsersRound, color: "text-pink-400", bg: "bg-pink-500/10" },
+        { label: "Total Registrations", value: totalRegistrations, icon: Users, color: "text-purple-400", bg: "bg-purple-500/10" },
+        { label: "Approved", value: totalApproved, icon: CheckCircle, color: "text-emerald-400", bg: "bg-emerald-500/10" },
+        { label: "Checked In", value: totalCheckedIn, icon: UserCheck, color: "text-cyan-400", bg: "bg-cyan-500/10" },
+        { label: "Submissions", value: totalSubmissions, icon: Code, color: "text-yellow-400", bg: "bg-yellow-500/10" },
+        { label: "Pending Review", value: totalPending, icon: Clock, color: "text-orange-400", bg: "bg-orange-500/10" },
+        { label: "Teams", value: totalTeams, icon: UsersRound, color: "text-pink-400", bg: "bg-pink-500/10" },
     ];
 
     return (

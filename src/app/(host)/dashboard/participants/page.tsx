@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { FadeIn } from "@/components/animations/FadeIn";
 import {
     Users, Search, CheckCircle, XCircle, Loader2,
-    ChevronDown, ChevronUp,
+    ChevronDown, ChevronUp, Trash2,
 } from "lucide-react";
 
 export default function ParticipantsPage() {
@@ -21,28 +21,33 @@ export default function ParticipantsPage() {
     const [expandedTeams, setExpandedTeams] = useState<Set<string>>(new Set());
     const [eventId, setEventId] = useState<string | null>(null);
     const [eventTitle, setEventTitle] = useState("");
+    const [events, setEvents] = useState<any[]>([]);
+    const [showEventPicker, setShowEventPicker] = useState(false);
+    const [deleting, setDeleting] = useState<string | null>(null);
 
-    // Auto-detect eventId from URL or fetch first event
+    // Fetch all events and auto-select
     useEffect(() => {
         const params = new URLSearchParams(window.location.search);
         const urlEventId = params.get("eventId");
 
-        if (urlEventId) {
-            setEventId(urlEventId);
-        } else {
-            // No eventId in URL — fetch user's events and use first one
-            fetch("/api/events")
-                .then((r) => r.json())
-                .then((events) => {
-                    if (Array.isArray(events) && events.length > 0) {
-                        setEventId(events[0].id);
-                        setEventTitle(events[0].title);
-                    } else {
-                        setLoading(false);
-                    }
-                })
-                .catch(() => setLoading(false));
-        }
+        fetch("/api/events")
+            .then((r) => r.json())
+            .then((data) => {
+                const evts = Array.isArray(data) ? data : [];
+                setEvents(evts);
+
+                if (urlEventId) {
+                    setEventId(urlEventId);
+                    const found = evts.find((e: any) => e.id === urlEventId);
+                    if (found) setEventTitle(found.title);
+                } else if (evts.length > 0) {
+                    setEventId(evts[0].id);
+                    setEventTitle(evts[0].title);
+                } else {
+                    setLoading(false);
+                }
+            })
+            .catch(() => setLoading(false));
     }, []);
 
     const fetchRegistrations = useCallback(async () => {
@@ -73,10 +78,20 @@ export default function ParticipantsPage() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ action }),
             });
-            if (res.ok) {
-                fetchRegistrations();
-            }
+            if (res.ok) fetchRegistrations();
         } catch { }
+    };
+
+    const handleDelete = async (registrationId: string) => {
+        if (!confirm("Are you sure you want to delete this registration?")) return;
+        setDeleting(registrationId);
+        try {
+            const res = await fetch(`/api/registrations/${registrationId}`, {
+                method: "DELETE",
+            });
+            if (res.ok) fetchRegistrations();
+        } catch { }
+        setDeleting(null);
     };
 
     const toggleTeam = (id: string) => {
@@ -97,6 +112,12 @@ export default function ParticipantsPage() {
         }
     };
 
+    const selectEvent = (e: any) => {
+        setEventId(e.id);
+        setEventTitle(e.title);
+        setShowEventPicker(false);
+    };
+
     return (
         <div className="flex min-h-screen bg-[#0a0a0a]">
             <HostSidebar />
@@ -113,6 +134,35 @@ export default function ParticipantsPage() {
                                 {eventTitle && <span className="text-purple-400"> — {eventTitle}</span>}
                             </p>
                         </div>
+
+                        {/* Event Selector */}
+                        {events.length > 1 && (
+                            <div className="relative">
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => setShowEventPicker(!showEventPicker)}
+                                    className="flex items-center gap-2"
+                                >
+                                    {eventTitle || "Select Event"}
+                                    <ChevronDown className={`h-4 w-4 transition-transform ${showEventPicker ? "rotate-180" : ""}`} />
+                                </Button>
+                                {showEventPicker && (
+                                    <div className="absolute top-full mt-2 right-0 w-64 bg-[#111111] border border-white/10 rounded-lg shadow-xl z-30 overflow-hidden">
+                                        {events.map((e) => (
+                                            <button
+                                                key={e.id}
+                                                onClick={() => selectEvent(e)}
+                                                className={`w-full text-left px-4 py-3 text-sm hover:bg-white/5 transition-all border-b border-white/5 last:border-0 ${eventId === e.id ? "text-purple-400 bg-purple-500/5" : "text-zinc-300"}`}
+                                            >
+                                                <div className="font-medium">{e.title}</div>
+                                                <div className="text-xs text-zinc-500 mt-0.5">{e._count?.registrations || 0} registrations</div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
                     </div>
                 </FadeIn>
 
@@ -199,10 +249,10 @@ export default function ParticipantsPage() {
                                                     <p className="text-sm text-zinc-500">{reg.teamLead?.email}</p>
                                                 </div>
                                             </div>
-                                            <div className="flex items-center gap-3">
+                                            <div className="flex items-center gap-2">
                                                 {statusBadge(reg.status)}
                                                 {reg.status === "PENDING" && (
-                                                    <div className="flex gap-2">
+                                                    <div className="flex gap-1">
                                                         <Button
                                                             size="sm"
                                                             variant="outline"
@@ -221,6 +271,17 @@ export default function ParticipantsPage() {
                                                         </Button>
                                                     </div>
                                                 )}
+                                                <Button
+                                                    size="sm"
+                                                    variant="ghost"
+                                                    className="text-zinc-500 hover:text-red-400"
+                                                    onClick={() => handleDelete(reg.id)}
+                                                    disabled={deleting === reg.id}
+                                                >
+                                                    {deleting === reg.id
+                                                        ? <Loader2 className="h-4 w-4 animate-spin" />
+                                                        : <Trash2 className="h-4 w-4" />}
+                                                </Button>
                                             </div>
                                         </div>
 
@@ -246,6 +307,9 @@ export default function ParticipantsPage() {
                                                                     )}
                                                                 </div>
                                                                 <span className="text-xs text-zinc-500">{p.user?.email}</span>
+                                                                {p.isPresent && (
+                                                                    <Badge variant="success" className="text-[10px]">✅ Present</Badge>
+                                                                )}
                                                             </div>
                                                         ))}
                                                     </div>
