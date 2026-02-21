@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { signIn } from "next-auth/react";
+import { signIn, useSession } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -19,6 +19,20 @@ export default function LoginPage() {
     const [mode, setMode] = useState<"credentials" | "magic">("credentials");
     const [magicSent, setMagicSent] = useState(false);
 
+    const redirectByRole = async () => {
+        // Fetch current user session to determine role
+        const res = await fetch("/api/auth/session");
+        const session = await res.json();
+        const role = session?.user?.role;
+        if (role === "HOST") {
+            router.push("/dashboard");
+        } else if (role === "JUDGE") {
+            router.push("/judge");
+        } else {
+            router.push("/my");
+        }
+    };
+
     const handleCredentialLogin = async (e: React.FormEvent) => {
         e.preventDefault();
         setLoading(true);
@@ -29,7 +43,7 @@ export default function LoginPage() {
                 redirect: false,
             });
             if (result?.ok) {
-                router.push("/dashboard");
+                await redirectByRole();
             }
         } catch {
             // Error handling
@@ -73,7 +87,7 @@ export default function LoginPage() {
                         <CardTitle>Welcome back</CardTitle>
                         <CardDescription>
                             {mode === "credentials"
-                                ? "Enter your email to sign in as host"
+                                ? "Enter your email to sign in"
                                 : magicSent
                                     ? "Check your inbox"
                                     : "We'll send you a magic link"
@@ -120,7 +134,7 @@ export default function LoginPage() {
                                         ) : (
                                             <ArrowRight className="h-4 w-4 mr-2" />
                                         )}
-                                        {mode === "credentials" ? "Sign In as Host" : "Send Magic Link"}
+                                        {mode === "credentials" ? "Sign In" : "Send Magic Link"}
                                     </Button>
 
                                     <div className="relative">
@@ -154,7 +168,7 @@ export default function LoginPage() {
                 </Card>
 
                 <p className="text-center text-zinc-500 text-xs mt-6">
-                    Quick Sign In auto-creates a host account for demo purposes.
+                    Quick Sign In looks up your existing account and redirects based on your role.
                 </p>
             </FadeIn>
         </div>

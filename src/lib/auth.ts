@@ -24,7 +24,7 @@ export const authOptions: NextAuthOptions = {
                     pass: process.env.RESEND_API_KEY || "",
                 },
             },
-            from: "Hackos <noreply@hackos.app>",
+            from: "Hackos <onboarding@resend.dev>",
         }),
         CredentialsProvider({
             name: "credentials",
@@ -40,12 +40,12 @@ export const authOptions: NextAuthOptions = {
                 });
 
                 if (!user) {
-                    // Auto-create user for demo purposes
+                    // Auto-create user as PARTICIPANT for demo purposes
                     const newUser = await prisma.user.create({
                         data: {
                             email: credentials.email,
                             name: credentials.email.split("@")[0],
-                            role: "HOST",
+                            role: "PARTICIPANT",
                         },
                     });
                     return {
