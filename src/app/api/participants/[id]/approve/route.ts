@@ -32,15 +32,15 @@ export async function POST(
             return NextResponse.json({ error: "Participant not found" }, { status: 404 });
         }
 
-        // If approving/rejecting individual, update registration status
         if (action === "approve") {
             await prisma.registration.update({
                 where: { id: participant.registrationId },
                 data: { status: "APPROVED" },
             });
 
+            // Send email in background — don't block the approval response
             const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-            await sendEmail({
+            sendEmail({
                 to: participant.user.email,
                 subject: `You're approved! — ${participant.registration.event.title}`,
                 html: approvalEmail(
@@ -48,20 +48,30 @@ export async function POST(
                     participant.registration.event.title,
                     `${appUrl}/my`
                 ),
+            }).then((result) => {
+                console.log("Approval email sent:", result);
+            }).catch((err) => {
+                console.error("Approval email failed (non-blocking):", err);
             });
+
         } else if (action === "reject") {
             await prisma.registration.update({
                 where: { id: participant.registrationId },
                 data: { status: "REJECTED" },
             });
 
-            await sendEmail({
+            // Send email in background — don't block the rejection response
+            sendEmail({
                 to: participant.user.email,
                 subject: `Application update — ${participant.registration.event.title}`,
                 html: rejectionEmail(
                     participant.user.name || "Hacker",
                     participant.registration.event.title
                 ),
+            }).then((result) => {
+                console.log("Rejection email sent:", result);
+            }).catch((err) => {
+                console.error("Rejection email failed (non-blocking):", err);
             });
         }
 
