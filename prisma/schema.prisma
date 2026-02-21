@@ -1,0 +1,260 @@
+// Prisma Schema for Hackos - Hackathon Management Platform
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  HOST
+  PARTICIPANT
+  JUDGE
+}
+
+enum RegistrationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum AnnouncementTarget {
+  ALL
+  APPROVED
+  TOP_TEAMS
+  TEAM_LEADS
+}
+
+enum JudgingRound {
+  PRELIMINARY
+  FINAL
+}
+
+model User {
+  id              String    @id @default(cuid())
+  name            String?
+  email           String    @unique
+  emailVerified   DateTime?
+  image           String?
+  hashedPassword  String?
+  role            Role      @default(PARTICIPANT)
+  profilePoints   Int       @default(0)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  accounts        Account[]
+  sessions        Session[]
+  hostedEvents    Event[]         @relation("HostedEvents")
+  participants    Participant[]
+  registrations   Registration[]  @relation("TeamLeadRegistrations")
+  judgeAssignments JudgeAssignment[]
+  scores          Score[]
+  goodiesGiven    GoodieLog[]     @relation("GoodiesGivenByHost")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Event {
+  id                   String    @id @default(cuid())
+  hostId               String
+  title                String
+  slug                 String    @unique
+  description          String?   @db.Text
+  bannerImage          String?
+  location             String?
+  startDate            DateTime
+  endDate              DateTime
+  registrationDeadline DateTime?
+  submissionOpenAt     DateTime?
+  submissionDeadline   DateTime?
+  maxTeamSize          Int       @default(4)
+  requiresApproval     Boolean   @default(true)
+  isPublished          Boolean   @default(false)
+  submissionsOpen      Boolean   @default(false)
+  livePitchingActive   Boolean   @default(false)
+  currentPitchTeamId   String?
+  resultsPublic        Boolean   @default(false)
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  host                 User              @relation("HostedEvents", fields: [hostId], references: [id])
+  registrations        Registration[]
+  announcements        Announcement[]
+  submissions          Submission[]
+  judgeAssignments     JudgeAssignment[]
+  eventPhotos          EventPhoto[]
+  goodieLogs           GoodieLog[]
+  networkingMatches    NetworkingMatch[]
+}
+
+model Registration {
+  id          String             @id @default(cuid())
+  eventId     String
+  teamName    String?
+  teamLeadId  String
+  status      RegistrationStatus @default(PENDING)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+
+  event        Event         @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  teamLead     User          @relation("TeamLeadRegistrations", fields: [teamLeadId], references: [id])
+  participants Participant[]
+  submissions  Submission[]
+}
+
+model Participant {
+  id               String    @id @default(cuid())
+  registrationId   String
+  userId           String
+  isTeamLead       Boolean   @default(false)
+  selfieUrl        String?
+  linkedinUrl      String?
+  resumeUrl        String?
+  bio              String?   @db.Text
+  isPresent        Boolean   @default(false)
+  goodieReceived   Boolean   @default(false)
+  qrToken          String    @unique @default(cuid())
+  networkingPoints Int       @default(0)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  registration     Registration       @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  user             User               @relation(fields: [userId], references: [id])
+  goodieLogs       GoodieLog[]
+  matchesAsP1      NetworkingMatch[]   @relation("MatchParticipant1")
+  matchesAsP2      NetworkingMatch[]   @relation("MatchParticipant2")
+}
+
+model NetworkingMatch {
+  id             String    @id @default(cuid())
+  eventId        String
+  participant1Id String
+  participant2Id String
+  isConnected    Boolean   @default(false)
+  p1Connected    Boolean   @default(false)
+  p2Connected    Boolean   @default(false)
+  connectedAt    DateTime?
+  createdAt      DateTime  @default(now())
+
+  event          Event       @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  participant1   Participant @relation("MatchParticipant1", fields: [participant1Id], references: [id])
+  participant2   Participant @relation("MatchParticipant2", fields: [participant2Id], references: [id])
+}
+
+model Announcement {
+  id          String             @id @default(cuid())
+  eventId     String
+  title       String
+  body        String             @db.Text
+  targetGroup AnnouncementTarget @default(ALL)
+  createdAt   DateTime           @default(now())
+
+  event       Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+}
+
+model Submission {
+  id               String    @id @default(cuid())
+  registrationId   String
+  eventId          String
+  projectTitle     String
+  description      String    @db.Text
+  repoUrl          String?
+  demoUrl          String?
+  presentationUrl  String?
+  submittedAt      DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  shortlisted      Boolean   @default(false)
+  pitchOrder       Int?
+
+  registration     Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  event            Event        @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  scores           Score[]
+}
+
+model JudgeAssignment {
+  id          String  @id @default(cuid())
+  eventId     String
+  judgeEmail  String
+  judgeUserId String?
+
+  event       Event   @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  judge       User?   @relation(fields: [judgeUserId], references: [id])
+}
+
+model Score {
+  id                String       @id @default(cuid())
+  submissionId      String
+  judgeId           String
+  round             JudgingRound @default(PRELIMINARY)
+  technicalImpl     Int          @default(0)
+  techStack         Int          @default(0)
+  innovation        Int          @default(0)
+  impact            Int          @default(0)
+  presentation      Int          @default(0)
+  total             Int          @default(0)
+  notes             String?      @db.Text
+  createdAt         DateTime     @default(now())
+
+  submission        Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  judge             User       @relation(fields: [judgeId], references: [id])
+
+  @@unique([submissionId, judgeId, round])
+}
+
+model EventPhoto {
+  id         String   @id @default(cuid())
+  eventId    String
+  imageUrl   String
+  uploadedAt DateTime @default(now())
+
+  event      Event @relation(fields: [eventId], references: [id], onDelete: Cascade)
+}
+
+model GoodieLog {
+  id            String   @id @default(cuid())
+  participantId String
+  eventId       String
+  item          String
+  givenAt       DateTime @default(now())
+  givenByHostId String
+
+  participant   Participant @relation(fields: [participantId], references: [id])
+  event         Event       @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  givenByHost   User        @relation("GoodiesGivenByHost", fields: [givenByHostId], references: [id])
+}

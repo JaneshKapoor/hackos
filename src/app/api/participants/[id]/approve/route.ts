@@ -1,0 +1,73 @@
+import { NextResponse } from "next/server";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import prisma from "@/lib/prisma";
+import { sendEmail, approvalEmail, rejectionEmail } from "@/lib/resend";
+
+export async function POST(
+    request: Request,
+    { params }: { params: { id: string } }
+) {
+    try {
+        const session = await getServerSession(authOptions);
+        if (!session?.user || (session.user as any).role !== "HOST") {
+            return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+        }
+
+        const body = await request.json();
+        const { action } = body; // "approve" or "reject"
+        const participantId = params.id;
+
+        const participant = await prisma.participant.findUnique({
+            where: { id: participantId },
+            include: {
+                user: true,
+                registration: {
+                    include: { event: true },
+                },
+            },
+        });
+
+        if (!participant) {
+            return NextResponse.json({ error: "Participant not found" }, { status: 404 });
+        }
+
+        // If approving/rejecting individual, update registration status
+        if (action === "approve") {
+            await prisma.registration.update({
+                where: { id: participant.registrationId },
+                data: { status: "APPROVED" },
+            });
+
+            const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+            await sendEmail({
+                to: participant.user.email,
+                subject: `You're approved! — ${participant.registration.event.title}`,
+                html: approvalEmail(
+                    participant.user.name || "Hacker",
+                    participant.registration.event.title,
+                    `${appUrl}/my`
+                ),
+            });
+        } else if (action === "reject") {
+            await prisma.registration.update({
+                where: { id: participant.registrationId },
+                data: { status: "REJECTED" },
+            });
+
+            await sendEmail({
+                to: participant.user.email,
+                subject: `Application update — ${participant.registration.event.title}`,
+                html: rejectionEmail(
+                    participant.user.name || "Hacker",
+                    participant.registration.event.title
+                ),
+            });
+        }
+
+        return NextResponse.json({ success: true });
+    } catch (error) {
+        console.error("Approval error:", error);
+        return NextResponse.json({ error: "Failed to update participant" }, { status: 500 });
+    }
+}
