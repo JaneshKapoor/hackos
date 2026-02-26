@@ -133,6 +133,27 @@ export default function ScanPage() {
         return () => { stopScanning(); };
     }, []);
 
+    // Play success beep sound using Web Audio API
+    const playSuccessSound = () => {
+        try {
+            const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+            const playTone = (freq: number, start: number, duration: number) => {
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.frequency.value = freq;
+                osc.type = "sine";
+                gain.gain.setValueAtTime(0.3, ctx.currentTime + start);
+                gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + start + duration);
+                osc.start(ctx.currentTime + start);
+                osc.stop(ctx.currentTime + start + duration);
+            };
+            playTone(880, 0, 0.15);
+            playTone(1320, 0.12, 0.2);
+        } catch { }
+    };
+
     const handleScan = async (data: string) => {
         const token = data.split("/qr/").pop() || data;
         if (!token) return;
@@ -141,6 +162,7 @@ export default function ScanPage() {
             if (res.ok) {
                 const participant = await res.json();
                 setScannedParticipant(participant);
+                playSuccessSound();
             }
         } catch { }
     };

@@ -27,9 +27,18 @@ export async function GET(request: Request) {
                     select: { id: true, name: true, email: true },
                 },
                 participants: {
-                    include: {
+                    select: {
+                        id: true,
+                        selfieUrl: true,
+                        linkedinUrl: true,
+                        resumeUrl: true,
+                        bio: true,
+                        isPresent: true,
+                        goodieReceived: true,
+                        isTeamLead: true,
+                        qrToken: true,
                         user: {
-                            select: { id: true, name: true, email: true },
+                            select: { id: true, name: true, email: true, image: true },
                         },
                     },
                 },

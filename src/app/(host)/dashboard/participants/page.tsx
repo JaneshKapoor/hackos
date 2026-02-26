@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { FadeIn } from "@/components/animations/FadeIn";
 import {
     Users, Search, CheckCircle, XCircle, Loader2,
-    ChevronDown, ChevronUp, Trash2, AlertTriangle,
+    ChevronDown, Trash2, AlertTriangle, ExternalLink, Linkedin,
 } from "lucide-react";
 
 export default function ParticipantsPage() {
@@ -18,7 +18,6 @@ export default function ParticipantsPage() {
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState("");
     const [statusFilter, setStatusFilter] = useState<string>("ALL");
-    const [expandedTeams, setExpandedTeams] = useState<Set<string>>(new Set());
     const [eventId, setEventId] = useState<string | null>(null);
     const [eventTitle, setEventTitle] = useState("");
     const [events, setEvents] = useState<any[]>([]);
@@ -63,13 +62,21 @@ export default function ParticipantsPage() {
             if (res.ok) {
                 const data = await res.json();
                 setRegistrations(Array.isArray(data) ? data : []);
+            } else {
+                setRegistrations([]);
             }
-        } catch { }
+        } catch {
+            setRegistrations([]);
+        }
         setLoading(false);
     }, [eventId, statusFilter, search]);
 
+    // Clear old data immediately on event/filter change, then fetch new
     useEffect(() => {
-        if (eventId) fetchRegistrations();
+        if (eventId) {
+            setRegistrations([]);
+            fetchRegistrations();
+        }
     }, [eventId, fetchRegistrations]);
 
     const handleAction = async (participantId: string, action: "approve" | "reject") => {
@@ -96,11 +103,10 @@ export default function ParticipantsPage() {
         setDeleteTarget(null);
     };
 
-    const toggleTeam = (id: string) => {
-        const updated = new Set(expandedTeams);
-        if (updated.has(id)) updated.delete(id);
-        else updated.add(id);
-        setExpandedTeams(updated);
+    const selectEvent = (e: any) => {
+        setEventId(e.id);
+        setEventTitle(e.title);
+        setShowEventPicker(false);
     };
 
     const statusBadge = (status: string) => {
@@ -112,12 +118,6 @@ export default function ParticipantsPage() {
             default:
                 return <Badge variant="warning">Pending</Badge>;
         }
-    };
-
-    const selectEvent = (e: any) => {
-        setEventId(e.id);
-        setEventTitle(e.title);
-        setShowEventPicker(false);
     };
 
     return (
@@ -138,7 +138,7 @@ export default function ParticipantsPage() {
                         </div>
 
                         {/* Event Selector */}
-                        {events.length > 1 && (
+                        {events.length > 0 && (
                             <div className="relative">
                                 <Button
                                     variant="outline"
@@ -194,7 +194,7 @@ export default function ParticipantsPage() {
                     </div>
                 </div>
 
-                {/* Registrations */}
+                {/* Registrations Table */}
                 {loading ? (
                     <div className="flex justify-center py-20">
                         <Loader2 className="h-8 w-8 animate-spin text-purple-500" />
@@ -214,135 +214,170 @@ export default function ParticipantsPage() {
                         </CardContent>
                     </Card>
                 ) : (
-                    <div className="space-y-3">
-                        <p className="text-sm text-zinc-400 mb-2">{registrations.length} registration(s)</p>
-                        {registrations.map((reg, i) => (
-                            <motion.div
-                                key={reg.id}
-                                initial={{ opacity: 0, y: 10 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                transition={{ delay: i * 0.05 }}
-                            >
-                                <Card className="bg-[#111111] border-white/5 hover:border-white/10 transition-all">
-                                    <CardContent className="p-4">
-                                        <div className="flex items-center justify-between">
-                                            <div className="flex items-center gap-4 flex-1">
-                                                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-cyan-500 flex items-center justify-center text-sm font-bold">
-                                                    {reg.teamLead?.name?.[0] || "?"}
-                                                </div>
-                                                <div className="flex-1 min-w-0">
-                                                    <div className="flex items-center gap-2 flex-wrap">
-                                                        <span className="font-medium truncate">{reg.teamLead?.name || "Unknown"}</span>
-                                                        {reg.teamName && (
-                                                            <span className="text-sm text-cyan-400">({reg.teamName})</span>
-                                                        )}
-                                                        {reg.participants?.length > 1 && (
-                                                            <button
-                                                                onClick={() => toggleTeam(reg.id)}
-                                                                className="text-xs text-zinc-500 hover:text-zinc-300 flex items-center gap-1"
-                                                            >
-                                                                {reg.participants.length} members
-                                                                {expandedTeams.has(reg.id)
-                                                                    ? <ChevronUp className="h-3 w-3" />
-                                                                    : <ChevronDown className="h-3 w-3" />}
-                                                            </button>
-                                                        )}
-                                                    </div>
-                                                    <p className="text-sm text-zinc-500">{reg.teamLead?.email}</p>
-                                                </div>
-                                            </div>
-                                            <div className="flex items-center gap-2">
-                                                {statusBadge(reg.status)}
-                                                {reg.status === "PENDING" && (
-                                                    <div className="flex gap-1">
-                                                        <Button
-                                                            size="sm"
-                                                            variant="outline"
-                                                            className="text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10"
-                                                            onClick={() => handleAction(reg.participants?.[0]?.id, "approve")}
-                                                        >
-                                                            <CheckCircle className="h-4 w-4" />
-                                                        </Button>
-                                                        <Button
-                                                            size="sm"
-                                                            variant="outline"
-                                                            className="text-red-400 border-red-500/30 hover:bg-red-500/10"
-                                                            onClick={() => handleAction(reg.participants?.[0]?.id, "reject")}
-                                                        >
-                                                            <XCircle className="h-4 w-4" />
-                                                        </Button>
-                                                    </div>
-                                                )}
-                                                {reg.status === "APPROVED" && (
-                                                    <Button
-                                                        size="sm"
-                                                        variant="outline"
-                                                        className="text-red-400 border-red-500/30 hover:bg-red-500/10"
-                                                        onClick={() => handleAction(reg.participants?.[0]?.id, "reject")}
-                                                        title="Revoke approval"
-                                                    >
-                                                        <XCircle className="h-4 w-4 mr-1" />
-                                                        <span className="text-xs">Reject</span>
-                                                    </Button>
-                                                )}
-                                                {reg.status === "REJECTED" && (
-                                                    <Button
-                                                        size="sm"
-                                                        variant="outline"
-                                                        className="text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10"
-                                                        onClick={() => handleAction(reg.participants?.[0]?.id, "approve")}
-                                                        title="Reinstate approval"
-                                                    >
-                                                        <CheckCircle className="h-4 w-4 mr-1" />
-                                                        <span className="text-xs">Approve</span>
-                                                    </Button>
-                                                )}
-                                                <Button
-                                                    size="sm"
-                                                    variant="ghost"
-                                                    className="text-zinc-500 hover:text-red-400"
-                                                    onClick={() => setDeleteTarget({ id: reg.id, name: reg.teamLead?.name || reg.teamName || "this participant" })}
-                                                >
-                                                    <Trash2 className="h-4 w-4" />
-                                                </Button>
-                                            </div>
-                                        </div>
+                    <div className="mb-4">
+                        <p className="text-sm text-zinc-400 mb-4">{registrations.length} registration(s)</p>
+                        <div className="overflow-x-auto rounded-xl border border-white/10">
+                            <table className="w-full text-left">
+                                <thead>
+                                    <tr className="border-b border-white/10 bg-[#0d0d0d]">
+                                        <th className="px-4 py-3 text-xs font-medium text-zinc-400 uppercase tracking-wider">Participant</th>
+                                        <th className="px-4 py-3 text-xs font-medium text-zinc-400 uppercase tracking-wider">Contact</th>
+                                        <th className="px-4 py-3 text-xs font-medium text-zinc-400 uppercase tracking-wider hidden lg:table-cell">LinkedIn</th>
+                                        <th className="px-4 py-3 text-xs font-medium text-zinc-400 uppercase tracking-wider hidden xl:table-cell">Bio</th>
+                                        <th className="px-4 py-3 text-xs font-medium text-zinc-400 uppercase tracking-wider">Status</th>
+                                        <th className="px-4 py-3 text-xs font-medium text-zinc-400 uppercase tracking-wider text-right">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-white/5">
+                                    {registrations.map((reg, i) => {
+                                        const participant = reg.participants?.[0];
+                                        const user = reg.teamLead || participant?.user || {};
+                                        const selfie = participant?.selfieUrl;
+                                        const linkedin = participant?.linkedinUrl;
+                                        const bio = participant?.bio;
 
-                                        {/* Expanded team members */}
-                                        <AnimatePresence>
-                                            {expandedTeams.has(reg.id) && reg.participants?.length > 1 && (
-                                                <motion.div
-                                                    initial={{ height: 0, opacity: 0 }}
-                                                    animate={{ height: "auto", opacity: 1 }}
-                                                    exit={{ height: 0, opacity: 0 }}
-                                                    className="overflow-hidden mt-3 pt-3 border-t border-white/5"
-                                                >
-                                                    <div className="space-y-2 pl-14">
-                                                        {reg.participants.map((p: any) => (
-                                                            <div key={p.id} className="flex items-center gap-3">
-                                                                <div className="w-6 h-6 rounded-full bg-zinc-700 flex items-center justify-center text-[10px] font-bold">
-                                                                    {p.user?.name?.[0] || "?"}
-                                                                </div>
-                                                                <div>
-                                                                    <span className="text-sm">{p.user?.name || "Unknown"}</span>
-                                                                    {p.isTeamLead && (
-                                                                        <Badge variant="outline" className="ml-2 text-[10px]">Lead</Badge>
-                                                                    )}
-                                                                </div>
-                                                                <span className="text-xs text-zinc-500">{p.user?.email}</span>
-                                                                {p.isPresent && (
-                                                                    <Badge variant="success" className="text-[10px]">✅ Present</Badge>
-                                                                )}
+                                        return (
+                                            <motion.tr
+                                                key={reg.id}
+                                                initial={{ opacity: 0, y: 8 }}
+                                                animate={{ opacity: 1, y: 0 }}
+                                                transition={{ delay: i * 0.03 }}
+                                                className="bg-[#111111] hover:bg-white/[0.03] transition-colors group"
+                                            >
+                                                {/* Participant - Selfie + Name + Team */}
+                                                <td className="px-4 py-3.5">
+                                                    <div className="flex items-center gap-3">
+                                                        {selfie ? (
+                                                            <img
+                                                                src={selfie}
+                                                                alt={user.name || "Selfie"}
+                                                                className="w-10 h-10 rounded-full object-cover border-2 border-white/10 shrink-0"
+                                                            />
+                                                        ) : (
+                                                            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500/40 to-cyan-500/40 flex items-center justify-center text-sm font-bold shrink-0">
+                                                                {user.name?.[0] || "?"}
                                                             </div>
-                                                        ))}
+                                                        )}
+                                                        <div className="min-w-0">
+                                                            <p className="font-medium text-sm text-white truncate">{user.name || "Unknown"}</p>
+                                                            {reg.teamName && (
+                                                                <p className="text-xs text-cyan-400/80 truncate">{reg.teamName}</p>
+                                                            )}
+                                                        </div>
                                                     </div>
-                                                </motion.div>
-                                            )}
-                                        </AnimatePresence>
-                                    </CardContent>
-                                </Card>
-                            </motion.div>
-                        ))}
+                                                </td>
+
+                                                {/* Email */}
+                                                <td className="px-4 py-3.5">
+                                                    <p className="text-sm text-zinc-400 truncate max-w-[200px]">{user.email}</p>
+                                                </td>
+
+                                                {/* LinkedIn */}
+                                                <td className="px-4 py-3.5 hidden lg:table-cell">
+                                                    {linkedin ? (
+                                                        <a
+                                                            href={linkedin}
+                                                            target="_blank"
+                                                            rel="noopener noreferrer"
+                                                            className="inline-flex items-center gap-1.5 text-sm text-blue-400 hover:text-blue-300 transition-colors"
+                                                        >
+                                                            <Linkedin className="h-3.5 w-3.5" />
+                                                            <span className="truncate max-w-[120px]">Profile</span>
+                                                            <ExternalLink className="h-3 w-3 opacity-50" />
+                                                        </a>
+                                                    ) : (
+                                                        <span className="text-xs text-zinc-600">—</span>
+                                                    )}
+                                                </td>
+
+                                                {/* Bio */}
+                                                <td className="px-4 py-3.5 hidden xl:table-cell">
+                                                    {bio ? (
+                                                        <p className="text-xs text-zinc-400 line-clamp-2 max-w-[200px]" title={bio}>
+                                                            {bio}
+                                                        </p>
+                                                    ) : (
+                                                        <span className="text-xs text-zinc-600">—</span>
+                                                    )}
+                                                </td>
+
+                                                {/* Status */}
+                                                <td className="px-4 py-3.5">
+                                                    {statusBadge(reg.status)}
+                                                    {participant?.isPresent && (
+                                                        <Badge variant="success" className="ml-1.5 text-[10px]">
+                                                            ✅ Present
+                                                        </Badge>
+                                                    )}
+                                                </td>
+
+                                                {/* Actions */}
+                                                <td className="px-4 py-3.5">
+                                                    <div className="flex items-center gap-1.5 justify-end">
+                                                        {reg.status === "PENDING" && (
+                                                            <>
+                                                                <Button
+                                                                    size="sm"
+                                                                    variant="outline"
+                                                                    className="text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10 h-8"
+                                                                    onClick={() => handleAction(participant?.id, "approve")}
+                                                                    title="Approve"
+                                                                >
+                                                                    <CheckCircle className="h-3.5 w-3.5 mr-1" />
+                                                                    <span className="text-xs">Approve</span>
+                                                                </Button>
+                                                                <Button
+                                                                    size="sm"
+                                                                    variant="outline"
+                                                                    className="text-red-400 border-red-500/30 hover:bg-red-500/10 h-8"
+                                                                    onClick={() => handleAction(participant?.id, "reject")}
+                                                                    title="Reject"
+                                                                >
+                                                                    <XCircle className="h-3.5 w-3.5 mr-1" />
+                                                                    <span className="text-xs">Reject</span>
+                                                                </Button>
+                                                            </>
+                                                        )}
+                                                        {reg.status === "APPROVED" && (
+                                                            <Button
+                                                                size="sm"
+                                                                variant="outline"
+                                                                className="text-red-400 border-red-500/30 hover:bg-red-500/10 h-8"
+                                                                onClick={() => handleAction(participant?.id, "reject")}
+                                                                title="Revoke approval"
+                                                            >
+                                                                <XCircle className="h-3.5 w-3.5 mr-1" />
+                                                                <span className="text-xs">Reject</span>
+                                                            </Button>
+                                                        )}
+                                                        {reg.status === "REJECTED" && (
+                                                            <Button
+                                                                size="sm"
+                                                                variant="outline"
+                                                                className="text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10 h-8"
+                                                                onClick={() => handleAction(participant?.id, "approve")}
+                                                                title="Reinstate"
+                                                            >
+                                                                <CheckCircle className="h-3.5 w-3.5 mr-1" />
+                                                                <span className="text-xs">Approve</span>
+                                                            </Button>
+                                                        )}
+                                                        <Button
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            className="text-zinc-500 hover:text-red-400 h-8"
+                                                            onClick={() => setDeleteTarget({ id: reg.id, name: user.name || reg.teamName || "this participant" })}
+                                                        >
+                                                            <Trash2 className="h-3.5 w-3.5" />
+                                                        </Button>
+                                                    </div>
+                                                </td>
+                                            </motion.tr>
+                                        );
+                                    })}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 )}
             </main>
@@ -357,9 +392,7 @@ export default function ParticipantsPage() {
                         className="fixed inset-0 z-50 flex items-center justify-center p-4"
                         onClick={() => setDeleteTarget(null)}
                     >
-                        {/* Backdrop */}
                         <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-                        {/* Modal */}
                         <motion.div
                             initial={{ scale: 0.9, opacity: 0 }}
                             animate={{ scale: 1, opacity: 1 }}
