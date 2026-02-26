@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { FadeIn } from "@/components/animations/FadeIn";
 import {
     Users, Search, CheckCircle, XCircle, Loader2,
-    ChevronDown, ChevronUp, Trash2,
+    ChevronDown, ChevronUp, Trash2, AlertTriangle,
 } from "lucide-react";
 
 export default function ParticipantsPage() {
@@ -24,6 +24,7 @@ export default function ParticipantsPage() {
     const [events, setEvents] = useState<any[]>([]);
     const [showEventPicker, setShowEventPicker] = useState(false);
     const [deleting, setDeleting] = useState<string | null>(null);
+    const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string } | null>(null);
 
     // Fetch all events and auto-select
     useEffect(() => {
@@ -82,16 +83,17 @@ export default function ParticipantsPage() {
         } catch { }
     };
 
-    const handleDelete = async (registrationId: string) => {
-        if (!confirm("Are you sure you want to delete this registration?")) return;
-        setDeleting(registrationId);
+    const confirmDeleteParticipant = async () => {
+        if (!deleteTarget) return;
+        setDeleting(deleteTarget.id);
         try {
-            const res = await fetch(`/api/registrations/${registrationId}`, {
+            const res = await fetch(`/api/registrations/${deleteTarget.id}`, {
                 method: "DELETE",
             });
             if (res.ok) fetchRegistrations();
         } catch { }
         setDeleting(null);
+        setDeleteTarget(null);
     };
 
     const toggleTeam = (id: string) => {
@@ -271,16 +273,37 @@ export default function ParticipantsPage() {
                                                         </Button>
                                                     </div>
                                                 )}
+                                                {reg.status === "APPROVED" && (
+                                                    <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        className="text-red-400 border-red-500/30 hover:bg-red-500/10"
+                                                        onClick={() => handleAction(reg.participants?.[0]?.id, "reject")}
+                                                        title="Revoke approval"
+                                                    >
+                                                        <XCircle className="h-4 w-4 mr-1" />
+                                                        <span className="text-xs">Reject</span>
+                                                    </Button>
+                                                )}
+                                                {reg.status === "REJECTED" && (
+                                                    <Button
+                                                        size="sm"
+                                                        variant="outline"
+                                                        className="text-emerald-400 border-emerald-500/30 hover:bg-emerald-500/10"
+                                                        onClick={() => handleAction(reg.participants?.[0]?.id, "approve")}
+                                                        title="Reinstate approval"
+                                                    >
+                                                        <CheckCircle className="h-4 w-4 mr-1" />
+                                                        <span className="text-xs">Approve</span>
+                                                    </Button>
+                                                )}
                                                 <Button
                                                     size="sm"
                                                     variant="ghost"
                                                     className="text-zinc-500 hover:text-red-400"
-                                                    onClick={() => handleDelete(reg.id)}
-                                                    disabled={deleting === reg.id}
+                                                    onClick={() => setDeleteTarget({ id: reg.id, name: reg.teamLead?.name || reg.teamName || "this participant" })}
                                                 >
-                                                    {deleting === reg.id
-                                                        ? <Loader2 className="h-4 w-4 animate-spin" />
-                                                        : <Trash2 className="h-4 w-4" />}
+                                                    <Trash2 className="h-4 w-4" />
                                                 </Button>
                                             </div>
                                         </div>
@@ -323,6 +346,64 @@ export default function ParticipantsPage() {
                     </div>
                 )}
             </main>
+
+            {/* Custom Delete Confirmation Modal */}
+            <AnimatePresence>
+                {deleteTarget && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-50 flex items-center justify-center p-4"
+                        onClick={() => setDeleteTarget(null)}
+                    >
+                        {/* Backdrop */}
+                        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+                        {/* Modal */}
+                        <motion.div
+                            initial={{ scale: 0.9, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.9, opacity: 0 }}
+                            transition={{ type: "spring", duration: 0.3 }}
+                            className="relative bg-[#111111] border border-red-500/20 rounded-2xl p-6 max-w-md w-full shadow-2xl"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <div className="flex flex-col items-center text-center">
+                                <div className="w-14 h-14 rounded-full bg-red-500/10 flex items-center justify-center mb-4">
+                                    <AlertTriangle className="h-7 w-7 text-red-400" />
+                                </div>
+                                <h3 className="text-lg font-semibold mb-2">Delete Registration</h3>
+                                <p className="text-sm text-zinc-400 mb-6">
+                                    Are you sure you want to delete the registration for{" "}
+                                    <span className="text-white font-medium">{deleteTarget.name}</span>?
+                                    This action cannot be undone.
+                                </p>
+                                <div className="flex gap-3 w-full">
+                                    <Button
+                                        variant="outline"
+                                        className="flex-1"
+                                        onClick={() => setDeleteTarget(null)}
+                                    >
+                                        Cancel
+                                    </Button>
+                                    <Button
+                                        variant="destructive"
+                                        className="flex-1 bg-red-600 hover:bg-red-700"
+                                        onClick={confirmDeleteParticipant}
+                                        disabled={deleting === deleteTarget.id}
+                                    >
+                                        {deleting === deleteTarget.id ? (
+                                            <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Deleting...</>
+                                        ) : (
+                                            <><Trash2 className="h-4 w-4 mr-2" /> Delete</>
+                                        )}
+                                    </Button>
+                                </div>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 }
