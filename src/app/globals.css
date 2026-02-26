@@ -42,6 +42,7 @@
   * {
     @apply border-border;
   }
+
   body {
     @apply bg-background text-foreground;
     font-family: 'Inter', sans-serif;
@@ -86,9 +87,12 @@
 }
 
 @keyframes pulse-glow {
-  0%, 100% {
+
+  0%,
+  100% {
     box-shadow: 0 0 15px rgba(124, 58, 237, 0.3);
   }
+
   50% {
     box-shadow: 0 0 30px rgba(124, 58, 237, 0.6);
   }
@@ -96,13 +100,27 @@
 
 /* Status badge animations */
 @keyframes flash-green {
-  0%, 100% { background-color: rgba(34, 197, 94, 0.1); }
-  50% { background-color: rgba(34, 197, 94, 0.3); }
+
+  0%,
+  100% {
+    background-color: rgba(34, 197, 94, 0.1);
+  }
+
+  50% {
+    background-color: rgba(34, 197, 94, 0.3);
+  }
 }
 
 @keyframes flash-red {
-  0%, 100% { background-color: rgba(239, 68, 68, 0.1); }
-  50% { background-color: rgba(239, 68, 68, 0.3); }
+
+  0%,
+  100% {
+    background-color: rgba(239, 68, 68, 0.1);
+  }
+
+  50% {
+    background-color: rgba(239, 68, 68, 0.3);
+  }
 }
 
 .flash-green {
@@ -123,4 +141,19 @@
   opacity: 1;
   transform: translateY(0);
   transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+/* Date input calendar icon — make visible on dark backgrounds */
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.7) sepia(0.3) saturate(3) hue-rotate(220deg);
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator:hover,
+input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+  filter: invert(0.8) sepia(0.5) saturate(5) hue-rotate(220deg);
 }

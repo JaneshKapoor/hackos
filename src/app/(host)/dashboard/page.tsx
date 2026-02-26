@@ -27,6 +27,7 @@ import {
     Check,
     ExternalLink,
     Trash2,
+    AlertTriangle,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -65,6 +66,7 @@ export default function DashboardPage() {
     const [showCreateForm, setShowCreateForm] = useState(false);
     const [copiedId, setCopiedId] = useState<string | null>(null);
     const [deletingEvent, setDeletingEvent] = useState<string | null>(null);
+    const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
     const [newEvent, setNewEvent] = useState({
         title: "",
         description: "",
@@ -133,21 +135,16 @@ export default function DashboardPage() {
         setCreating(false);
     };
 
-    const deleteEvent = async (eventId: string, eventTitle: string) => {
-        if (!confirm(`Are you sure you want to delete "${eventTitle}"? This will permanently remove the event and ALL its registrations, submissions, and data. This cannot be undone.`)) {
-            return;
-        }
-        setDeletingEvent(eventId);
+    const confirmDeleteEvent = async () => {
+        if (!deleteTarget) return;
+        setDeletingEvent(deleteTarget.id);
         try {
-            const res = await fetch(`/api/events/${eventId}`, { method: "DELETE" });
+            const res = await fetch(`/api/events/${deleteTarget.id}`, { method: "DELETE" });
             if (res.ok) {
+                setDeleteTarget(null);
                 await fetchEvents();
-            } else {
-                alert("Failed to delete event. Please try again.");
             }
-        } catch {
-            alert("Failed to delete event. Please try again.");
-        }
+        } catch { }
         setDeletingEvent(null);
     };
 
@@ -363,14 +360,14 @@ export default function DashboardPage() {
                                                             <ExternalLink className="h-3.5 w-3.5 mr-1" /> View
                                                         </Button>
                                                     </Link>
-                                                    <Link href={`/dashboard/participants?eventId=${event.id}`}>
+                                                    <Link href={`/dashboard/events/${event.id}`}>
                                                         <Button size="sm" variant="gradient">Manage</Button>
                                                     </Link>
                                                     <Button
                                                         size="sm"
                                                         variant="ghost"
                                                         className="text-zinc-500 hover:text-red-400 hover:bg-red-500/10"
-                                                        onClick={() => deleteEvent(event.id, event.title)}
+                                                        onClick={() => setDeleteTarget({ id: event.id, title: event.title })}
                                                         disabled={deletingEvent === event.id}
                                                         title="Delete event"
                                                     >
@@ -390,6 +387,75 @@ export default function DashboardPage() {
                     )}
                 </FadeIn>
             </main>
+
+            {/* Delete Event Confirmation Modal */}
+            {deleteTarget && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center">
+                    {/* Backdrop */}
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+                        onClick={() => !deletingEvent && setDeleteTarget(null)}
+                    />
+                    {/* Modal */}
+                    <motion.div
+                        initial={{ opacity: 0, scale: 0.9, y: 20 }}
+                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                        exit={{ opacity: 0, scale: 0.9, y: 20 }}
+                        transition={{ type: "spring", duration: 0.4 }}
+                        className="relative z-10 w-full max-w-md mx-4"
+                    >
+                        <Card className="bg-[#111111] border-red-500/20 shadow-2xl shadow-red-500/5">
+                            <CardContent className="p-8">
+                                <div className="flex flex-col items-center text-center">
+                                    <div className="w-16 h-16 rounded-full bg-red-500/10 flex items-center justify-center mb-5">
+                                        <AlertTriangle className="h-8 w-8 text-red-400" />
+                                    </div>
+                                    <h3 className="text-xl font-bold text-white mb-2">Delete Event</h3>
+                                    <p className="text-zinc-400 mb-1">
+                                        Are you sure you want to delete
+                                    </p>
+                                    <p className="text-white font-semibold mb-4">
+                                        &ldquo;{deleteTarget.title}&rdquo;
+                                    </p>
+                                    <p className="text-sm text-zinc-500 mb-8 leading-relaxed">
+                                        This will permanently remove the event along with all its registrations, participants, submissions, and data. This action cannot be undone.
+                                    </p>
+                                    <div className="flex gap-3 w-full">
+                                        <Button
+                                            variant="outline"
+                                            className="flex-1"
+                                            onClick={() => setDeleteTarget(null)}
+                                            disabled={!!deletingEvent}
+                                        >
+                                            Cancel
+                                        </Button>
+                                        <Button
+                                            className="flex-1 bg-red-600 hover:bg-red-700 text-white border-0"
+                                            onClick={confirmDeleteEvent}
+                                            disabled={!!deletingEvent}
+                                        >
+                                            {deletingEvent ? (
+                                                <>
+                                                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                                    Deleting...
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Trash2 className="h-4 w-4 mr-2" />
+                                                    Delete Event
+                                                </>
+                                            )}
+                                        </Button>
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    </motion.div>
+                </div>
+            )}
         </div>
     );
 }
