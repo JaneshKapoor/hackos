@@ -10,7 +10,7 @@ import { FadeIn } from "@/components/animations/FadeIn";
 import { motion, AnimatePresence } from "framer-motion";
 import {
     ScanLine, UserCheck, Gift, User, Search, CheckCircle, Loader2, X,
-    Camera, CameraOff, AlertTriangle, Users, ChevronDown,
+    Camera, CameraOff, AlertTriangle, Users, ChevronDown, XCircle,
 } from "lucide-react";
 
 export default function ScanPage() {
@@ -31,6 +31,7 @@ export default function ScanPage() {
     const [isScanning, setIsScanning] = useState(false);
     const [cameraError, setCameraError] = useState<string | null>(null);
     const [scannerInstance, setScannerInstance] = useState<any>(null);
+    const [cancelCheckinTarget, setCancelCheckinTarget] = useState<{ pid: string; name: string } | null>(null);
 
     // Fetch events
     useEffect(() => {
@@ -79,12 +80,20 @@ export default function ScanPage() {
             if (res.ok) {
                 const data = await res.json();
                 setParticipants(data || []);
+            } else {
+                setParticipants([]);
             }
-        } catch { }
+        } catch {
+            setParticipants([]);
+        }
         setLoadingParticipants(false);
     }, [selectedEvent]);
 
+    // Clear old data immediately on event change, then fetch new
     useEffect(() => {
+        setParticipants([]);
+        setFilterText("");
+        setScannedParticipant(null);
         fetchParticipants();
     }, [fetchParticipants]);
 
@@ -205,6 +214,42 @@ export default function ScanPage() {
         setActionLoading(null);
     };
 
+    // Cancel check-in handler
+    const cancelCheckin = async () => {
+        if (!cancelCheckinTarget) return;
+        setActionLoading(`cancel-${cancelCheckinTarget.pid}`);
+        try {
+            const res = await fetch(`/api/participants/${cancelCheckinTarget.pid}/checkin`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "checkout" }),
+            });
+            if (res.ok) {
+                setShowSuccess("Check-in cancelled ❌");
+                setTimeout(() => setShowSuccess(null), 2000);
+                // Update scanned participant
+                if (scannedParticipant?.id === cancelCheckinTarget.pid) {
+                    setScannedParticipant({ ...scannedParticipant, isPresent: false });
+                }
+                // Update participant list
+                setParticipants((prev) =>
+                    prev.map((p) => {
+                        const part = p.participants?.[0] || p;
+                        if (part.id === cancelCheckinTarget.pid) {
+                            if (p.participants) {
+                                return { ...p, participants: [{ ...part, isPresent: false }] };
+                            }
+                            return { ...part, isPresent: false };
+                        }
+                        return p;
+                    })
+                );
+            }
+        } catch { }
+        setActionLoading(null);
+        setCancelCheckinTarget(null);
+    };
+
     // Filter approved participants
     const filteredParticipants = participants.filter((reg) => {
         const name = reg.teamLead?.name || reg.participants?.[0]?.user?.name || "";
@@ -226,13 +271,15 @@ export default function ScanPage() {
                     <p className="text-zinc-400 mb-6">Scan QR codes or manually check in approved participants</p>
 
                     {/* Event Selector */}
-                    {events.length > 1 && (
+                    {events.length > 0 && (
                         <div className="mb-6">
                             <label className="text-sm text-zinc-400 mb-1 block">Event</label>
                             <div className="relative w-full max-w-xs">
                                 <select
                                     value={selectedEvent}
-                                    onChange={(e) => setSelectedEvent(e.target.value)}
+                                    onChange={(e) => {
+                                        setSelectedEvent(e.target.value);
+                                    }}
                                     className="w-full appearance-none bg-[#111111] border border-white/10 text-white rounded-lg px-4 py-2.5 pr-10 text-sm focus:outline-none focus:ring-2 focus:ring-purple-500"
                                 >
                                     {events.map((ev) => (
@@ -506,9 +553,20 @@ export default function ScanPage() {
                                                 </div>
                                                 <div className="flex items-center gap-2 shrink-0">
                                                     {isPresent ? (
-                                                        <Badge variant="success" className="text-xs">
-                                                            <CheckCircle className="h-3 w-3 mr-1" /> Present
-                                                        </Badge>
+                                                        <Button
+                                                            size="sm"
+                                                            variant="outline"
+                                                            onClick={() => setCancelCheckinTarget({ pid: pid!, name: user.name || "this participant" })}
+                                                            className="text-xs h-8 text-emerald-400 border-emerald-500/30 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/30 transition-colors"
+                                                            disabled={actionLoading === `cancel-${pid}`}
+                                                        >
+                                                            {actionLoading === `cancel-${pid}` ? (
+                                                                <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                                                            ) : (
+                                                                <CheckCircle className="h-3 w-3 mr-1" />
+                                                            )}
+                                                            Present
+                                                        </Button>
                                                     ) : (
                                                         <Button
                                                             size="sm"
@@ -535,6 +593,62 @@ export default function ScanPage() {
                     </Card>
                 </FadeIn>
             </main>
+
+            {/* Cancel Check-in Confirmation Modal */}
+            <AnimatePresence>
+                {cancelCheckinTarget && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        className="fixed inset-0 z-50 flex items-center justify-center p-4"
+                        onClick={() => setCancelCheckinTarget(null)}
+                    >
+                        <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+                        <motion.div
+                            initial={{ scale: 0.9, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.9, opacity: 0 }}
+                            transition={{ type: "spring", duration: 0.3 }}
+                            className="relative bg-[#111111] border border-yellow-500/20 rounded-2xl p-6 max-w-md w-full shadow-2xl"
+                            onClick={(e) => e.stopPropagation()}
+                        >
+                            <div className="flex flex-col items-center text-center">
+                                <div className="w-14 h-14 rounded-full bg-yellow-500/10 flex items-center justify-center mb-4">
+                                    <AlertTriangle className="h-7 w-7 text-yellow-400" />
+                                </div>
+                                <h3 className="text-lg font-semibold mb-2">Cancel Check-in</h3>
+                                <p className="text-sm text-zinc-400 mb-6">
+                                    Are you sure you want to cancel the check-in for{" "}
+                                    <span className="text-white font-medium">{cancelCheckinTarget.name}</span>?
+                                    They will be marked as not present.
+                                </p>
+                                <div className="flex gap-3 w-full">
+                                    <Button
+                                        variant="outline"
+                                        className="flex-1"
+                                        onClick={() => setCancelCheckinTarget(null)}
+                                    >
+                                        Keep Checked In
+                                    </Button>
+                                    <Button
+                                        variant="destructive"
+                                        className="flex-1 bg-yellow-600 hover:bg-yellow-700"
+                                        onClick={cancelCheckin}
+                                        disabled={actionLoading === `cancel-${cancelCheckinTarget.pid}`}
+                                    >
+                                        {actionLoading === `cancel-${cancelCheckinTarget.pid}` ? (
+                                            <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Cancelling...</>
+                                        ) : (
+                                            <><XCircle className="h-4 w-4 mr-2" /> Cancel Check-in</>
+                                        )}
+                                    </Button>
+                                </div>
+                            </div>
+                        </motion.div>
+                    </motion.div>
+                )}
+            </AnimatePresence>
         </div>
     );
 }
