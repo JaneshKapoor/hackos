@@ -26,6 +26,7 @@ import {
     Copy,
     Check,
     ExternalLink,
+    Trash2,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -63,6 +64,7 @@ export default function DashboardPage() {
     const [creating, setCreating] = useState(false);
     const [showCreateForm, setShowCreateForm] = useState(false);
     const [copiedId, setCopiedId] = useState<string | null>(null);
+    const [deletingEvent, setDeletingEvent] = useState<string | null>(null);
     const [newEvent, setNewEvent] = useState({
         title: "",
         description: "",
@@ -129,6 +131,24 @@ export default function DashboardPage() {
             }
         } catch { }
         setCreating(false);
+    };
+
+    const deleteEvent = async (eventId: string, eventTitle: string) => {
+        if (!confirm(`Are you sure you want to delete "${eventTitle}"? This will permanently remove the event and ALL its registrations, submissions, and data. This cannot be undone.`)) {
+            return;
+        }
+        setDeletingEvent(eventId);
+        try {
+            const res = await fetch(`/api/events/${eventId}`, { method: "DELETE" });
+            if (res.ok) {
+                await fetchEvents();
+            } else {
+                alert("Failed to delete event. Please try again.");
+            }
+        } catch {
+            alert("Failed to delete event. Please try again.");
+        }
+        setDeletingEvent(null);
     };
 
     // Compute real stats from events
@@ -346,6 +366,20 @@ export default function DashboardPage() {
                                                     <Link href={`/dashboard/participants?eventId=${event.id}`}>
                                                         <Button size="sm" variant="gradient">Manage</Button>
                                                     </Link>
+                                                    <Button
+                                                        size="sm"
+                                                        variant="ghost"
+                                                        className="text-zinc-500 hover:text-red-400 hover:bg-red-500/10"
+                                                        onClick={() => deleteEvent(event.id, event.title)}
+                                                        disabled={deletingEvent === event.id}
+                                                        title="Delete event"
+                                                    >
+                                                        {deletingEvent === event.id ? (
+                                                            <Loader2 className="h-4 w-4 animate-spin" />
+                                                        ) : (
+                                                            <Trash2 className="h-4 w-4" />
+                                                        )}
+                                                    </Button>
                                                 </div>
                                             </div>
                                         </CardContent>
