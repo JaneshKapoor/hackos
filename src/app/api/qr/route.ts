@@ -32,6 +32,15 @@ export async function GET(request: Request) {
             if (!participant) {
                 return NextResponse.json({ error: "Invalid QR code" }, { status: 404 });
             }
+
+            // Validate participant belongs to the selected event
+            if (eventId && participant.registration?.event?.id !== eventId) {
+                return NextResponse.json(
+                    { error: `Participant not registered for this event.` },
+                    { status: 403 }
+                );
+            }
+
             return NextResponse.json(participant);
         }
 

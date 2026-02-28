@@ -25,6 +25,7 @@ export default function ScanPage() {
     const [searchQuery, setSearchQuery] = useState("");
     const [actionLoading, setActionLoading] = useState<string | null>(null);
     const [showSuccess, setShowSuccess] = useState<string | null>(null);
+    const [scanError, setScanError] = useState<string | null>(null);
 
     // Camera state
     const [cameraAvailable, setCameraAvailable] = useState<boolean | null>(null);
@@ -219,7 +220,9 @@ export default function ScanPage() {
         scanCooldownRef.current = now;
 
         try {
-            const res = await fetch(`/api/qr?token=${token}`);
+            const params = new URLSearchParams({ token });
+            if (selectedEvent) params.set("eventId", selectedEvent);
+            const res = await fetch(`/api/qr?${params}`);
             if (res.ok) {
                 const participant = await res.json();
                 setScannedParticipant(participant);
@@ -229,6 +232,10 @@ export default function ScanPage() {
                 if (scannerInstance) {
                     try { await scannerInstance.pause(true); } catch { }
                 }
+            } else {
+                const err = await res.json().catch(() => ({}));
+                setScanError(err.error || "Participant not found");
+                setTimeout(() => setScanError(null), 4000);
             }
         } catch { }
     };
@@ -457,6 +464,26 @@ export default function ScanPage() {
                                 )}
                             </CardContent>
                         </Card>
+
+                        {/* Scan Error Banner */}
+                        <AnimatePresence>
+                            {scanError && (
+                                <motion.div
+                                    initial={{ opacity: 0, y: -10 }}
+                                    animate={{ opacity: 1, y: 0 }}
+                                    exit={{ opacity: 0, y: -10 }}
+                                    className="flex items-start gap-3 p-4 rounded-lg bg-red-500/10 border border-red-500/30"
+                                >
+                                    <AlertTriangle className="h-5 w-5 text-red-400 mt-0.5 shrink-0" />
+                                    <div>
+                                        <p className="text-sm font-medium text-red-300">{scanError}</p>
+                                    </div>
+                                    <Button variant="ghost" size="icon" className="ml-auto shrink-0 h-6 w-6" onClick={() => setScanError(null)}>
+                                        <X className="h-3.5 w-3.5 text-red-400" />
+                                    </Button>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
 
                         {/* Manual Search with Autocomplete */}
                         <Card className="bg-[#111111] border-white/10">
