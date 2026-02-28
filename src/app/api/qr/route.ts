@@ -20,6 +20,7 @@ export async function GET(request: Request) {
         const { searchParams } = new URL(request.url);
         const token = searchParams.get("token");
         const search = searchParams.get("search");
+        const eventId = searchParams.get("eventId");
 
         // Lookup by QR token
         if (token) {
@@ -38,10 +39,16 @@ export async function GET(request: Request) {
         if (search) {
             const s = search.toLowerCase().trim();
 
+            // Build event filter if eventId is provided
+            const eventFilter = eventId
+                ? { registration: { eventId } }
+                : {};
+
             // Try finding by exact email first
             const byEmail = await prisma.participant.findFirst({
                 where: {
                     user: { email: { equals: s, mode: "insensitive" } },
+                    ...eventFilter,
                 },
                 include: participantIncludes,
             });
@@ -51,6 +58,7 @@ export async function GET(request: Request) {
             const byName = await prisma.participant.findFirst({
                 where: {
                     user: { name: { contains: s, mode: "insensitive" } },
+                    ...eventFilter,
                 },
                 include: participantIncludes,
             });

@@ -172,10 +172,14 @@ export default function ScanPage() {
         if (!searchQuery.trim()) return;
         setSearching(true);
         try {
-            const res = await fetch(`/api/qr?search=${encodeURIComponent(searchQuery.trim())}`);
+            const params = new URLSearchParams({ search: searchQuery.trim() });
+            if (selectedEvent) params.set("eventId", selectedEvent);
+            const res = await fetch(`/api/qr?${params}`);
             if (res.ok) {
                 const participant = await res.json();
                 setScannedParticipant(participant);
+            } else {
+                setScannedParticipant(null);
             }
         } catch { }
         setSearching(false);
