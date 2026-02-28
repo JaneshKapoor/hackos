@@ -21,8 +21,16 @@ export async function GET(request: Request) {
             return NextResponse.json({ error: "Event not found" }, { status: 404 });
         }
 
+        const status = searchParams.get("status");
+        const search = searchParams.get("search");
+
+        const where: any = { eventId };
+        if (status && status !== "ALL") {
+            where.status = status;
+        }
+
         const registrations = await prisma.registration.findMany({
-            where: { eventId },
+            where,
             include: {
                 teamLead: {
                     select: { id: true, name: true, email: true },
@@ -46,8 +54,20 @@ export async function GET(request: Request) {
             orderBy: { createdAt: "desc" },
         });
 
+        // Apply search filter
+        let filtered = registrations;
+        if (search) {
+            const s = search.toLowerCase();
+            filtered = registrations.filter(
+                (r) =>
+                    r.teamLead?.name?.toLowerCase().includes(s) ||
+                    r.teamLead?.email?.toLowerCase().includes(s) ||
+                    r.teamName?.toLowerCase().includes(s)
+            );
+        }
+
         // Build CSV rows
-        const csvData = registrations.map((reg) => {
+        const csvData = filtered.map((reg) => {
             const participant = reg.participants?.[0];
             const user = reg.teamLead || participant?.user || { name: "Unknown", email: "" };
             return {

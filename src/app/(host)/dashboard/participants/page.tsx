@@ -113,15 +113,20 @@ export default function ParticipantsPage() {
     const exportToCSV = async () => {
         if (!eventId) return;
 
-        const res = await fetch(`/api/registrations/export?eventId=${eventId}`);
+        const params = new URLSearchParams({ eventId });
+        if (statusFilter !== "ALL") params.set("status", statusFilter);
+        if (search) params.set("search", search);
+
+        const res = await fetch(`/api/registrations/export?${params}`);
         const blob = await res.blob();
 
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
 
-        // Optional: custom filename override
-        a.download = `${eventTitle || "participants"}.csv`;
+        // Custom filename with filter label
+        const filterLabel = statusFilter !== "ALL" ? `_${statusFilter.toLowerCase()}` : "";
+        a.download = `${eventTitle || "participants"}${filterLabel}_participants.csv`;
 
         document.body.appendChild(a);
         a.click();
