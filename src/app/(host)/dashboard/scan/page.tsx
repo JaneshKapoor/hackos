@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { HostSidebar } from "@/components/shared/Navbar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -32,6 +32,55 @@ export default function ScanPage() {
     const [cameraError, setCameraError] = useState<string | null>(null);
     const [scannerInstance, setScannerInstance] = useState<any>(null);
     const [cancelCheckinTarget, setCancelCheckinTarget] = useState<{ pid: string; name: string } | null>(null);
+    const [showSuggestions, setShowSuggestions] = useState(false);
+    const searchRef = useRef<HTMLDivElement>(null);
+
+    // Compute search suggestions from loaded participants
+    const searchSuggestions = useMemo(() => {
+        if (!searchQuery.trim() || searchQuery.trim().length < 1) return [];
+        const q = searchQuery.toLowerCase().trim();
+        return participants
+            .filter((reg) => {
+                const name = reg.teamLead?.name || reg.participants?.[0]?.user?.name || "";
+                const email = reg.teamLead?.email || reg.participants?.[0]?.user?.email || "";
+                const teamName = reg.teamName || "";
+                return (
+                    name.toLowerCase().includes(q) ||
+                    email.toLowerCase().includes(q) ||
+                    teamName.toLowerCase().includes(q)
+                );
+            })
+            .slice(0, 5);
+    }, [searchQuery, participants]);
+
+    // Close suggestions on outside click
+    useEffect(() => {
+        const handleClick = (e: MouseEvent) => {
+            if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
+                setShowSuggestions(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClick);
+        return () => document.removeEventListener("mousedown", handleClick);
+    }, []);
+
+    // Select a suggestion from the dropdown
+    const selectSuggestion = async (reg: any) => {
+        const participant = reg.participants?.[0];
+        if (!participant) return;
+        setShowSuggestions(false);
+        setSearchQuery("");
+        setSearching(true);
+        try {
+            const params = new URLSearchParams({ token: participant.qrToken });
+            const res = await fetch(`/api/qr?${params}`);
+            if (res.ok) {
+                const data = await res.json();
+                setScannedParticipant(data);
+            }
+        } catch { }
+        setSearching(false);
+    };
 
     // Fetch events
     useEffect(() => {
@@ -381,20 +430,59 @@ export default function ScanPage() {
                             </CardContent>
                         </Card>
 
-                        {/* Manual Search */}
+                        {/* Manual Search with Autocomplete */}
                         <Card className="bg-[#111111] border-white/10">
                             <CardContent className="pt-6">
-                                <form onSubmit={handleSearch} className="flex gap-3">
-                                    <Input
-                                        placeholder="Search by name, email, or QR token..."
-                                        value={searchQuery}
-                                        onChange={(e) => setSearchQuery(e.target.value)}
-                                        className="bg-[#0a0a0a] border-white/10"
-                                    />
-                                    <Button type="submit" variant="outline" disabled={searching}>
-                                        {searching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
-                                    </Button>
-                                </form>
+                                <div ref={searchRef} className="relative">
+                                    <form onSubmit={handleSearch} className="flex gap-3">
+                                        <Input
+                                            placeholder="Search by name, email, or QR token..."
+                                            value={searchQuery}
+                                            onChange={(e) => {
+                                                setSearchQuery(e.target.value);
+                                                setShowSuggestions(true);
+                                            }}
+                                            onFocus={() => setShowSuggestions(true)}
+                                            className="bg-[#0a0a0a] border-white/10"
+                                            autoComplete="off"
+                                        />
+                                        <Button type="submit" variant="outline" disabled={searching}>
+                                            {searching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                                        </Button>
+                                    </form>
+
+                                    {/* Autocomplete dropdown */}
+                                    {showSuggestions && searchSuggestions.length > 0 && (
+                                        <div className="absolute top-full left-0 right-12 mt-1 bg-[#1a1a1a] border border-white/10 rounded-lg shadow-2xl z-40 overflow-hidden">
+                                            {searchSuggestions.map((reg) => {
+                                                const p = reg.participants?.[0];
+                                                const user = reg.teamLead || p?.user || {};
+                                                return (
+                                                    <button
+                                                        key={reg.id}
+                                                        type="button"
+                                                        onClick={() => selectSuggestion(reg)}
+                                                        className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-purple-500/10 transition-colors border-b border-white/5 last:border-0"
+                                                    >
+                                                        <div className="w-8 h-8 rounded-full bg-gradient-to-br from-purple-500/40 to-cyan-500/40 flex items-center justify-center text-xs font-bold shrink-0">
+                                                            {user.name?.[0] || "?"}
+                                                        </div>
+                                                        <div className="min-w-0 flex-1">
+                                                            <p className="text-sm font-medium text-white truncate">{user.name || "Unknown"}</p>
+                                                            <p className="text-xs text-zinc-500 truncate">{user.email}</p>
+                                                        </div>
+                                                        {reg.teamName && (
+                                                            <span className="text-[10px] text-cyan-400/70 shrink-0">{reg.teamName}</span>
+                                                        )}
+                                                        {p?.isPresent && (
+                                                            <Badge variant="success" className="text-[10px] shrink-0">Present</Badge>
+                                                        )}
+                                                    </button>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
                             </CardContent>
                         </Card>
                     </div>
