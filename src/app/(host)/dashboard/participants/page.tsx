@@ -10,8 +10,9 @@ import { Badge } from "@/components/ui/badge";
 import { FadeIn } from "@/components/animations/FadeIn";
 import {
     Users, Search, CheckCircle, XCircle, Loader2,
-    ChevronDown, Trash2, AlertTriangle, ExternalLink, Linkedin,
+    ChevronDown, Trash2, AlertTriangle, ExternalLink, Linkedin, Download,
 } from "lucide-react";
+
 
 export default function ParticipantsPage() {
     const [registrations, setRegistrations] = useState<any[]>([]);
@@ -109,6 +110,26 @@ export default function ParticipantsPage() {
         setShowEventPicker(false);
     };
 
+    const exportToCSV = async () => {
+        if (!eventId) return;
+
+        const res = await fetch(`/api/registrations/export?eventId=${eventId}`);
+        const blob = await res.blob();
+
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+
+        // Optional: custom filename override
+        a.download = `${eventTitle || "participants"}.csv`;
+
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+
+        window.URL.revokeObjectURL(url);
+    };
+
     const statusBadge = (status: string) => {
         switch (status) {
             case "APPROVED":
@@ -137,34 +158,49 @@ export default function ParticipantsPage() {
                             </p>
                         </div>
 
-                        {/* Event Selector */}
-                        {events.length > 0 && (
-                            <div className="relative">
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => setShowEventPicker(!showEventPicker)}
-                                    className="flex items-center gap-2"
-                                >
-                                    {eventTitle || "Select Event"}
-                                    <ChevronDown className={`h-4 w-4 transition-transform ${showEventPicker ? "rotate-180" : ""}`} />
-                                </Button>
-                                {showEventPicker && (
-                                    <div className="absolute top-full mt-2 right-0 w-64 bg-[#111111] border border-white/10 rounded-lg shadow-xl z-30 overflow-hidden">
-                                        {events.map((e) => (
-                                            <button
-                                                key={e.id}
-                                                onClick={() => selectEvent(e)}
-                                                className={`w-full text-left px-4 py-3 text-sm hover:bg-white/5 transition-all border-b border-white/5 last:border-0 ${eventId === e.id ? "text-purple-400 bg-purple-500/5" : "text-zinc-300"}`}
-                                            >
-                                                <div className="font-medium">{e.title}</div>
-                                                <div className="text-xs text-zinc-500 mt-0.5">{e._count?.registrations || 0} registrations</div>
-                                            </button>
-                                        ))}
-                                    </div>
-                                )}
-                            </div>
-                        )}
+                        <div className="flex items-center gap-3">
+
+                            {/* Event Selector */}
+                            {events.length > 0 && (
+                                <div className="relative">
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => setShowEventPicker(!showEventPicker)}
+                                        className="flex items-center gap-2"
+                                    >
+                                        {eventTitle || "Select Event"}
+                                        <ChevronDown className={`h-4 w-4 transition-transform ${showEventPicker ? "rotate-180" : ""}`} />
+                                    </Button>
+                                    {showEventPicker && (
+                                        <div className="absolute top-full mt-2 right-0 w-64 bg-[#111111] border border-white/10 rounded-lg shadow-xl z-30 overflow-hidden">
+                                            {events.map((e) => (
+                                                <button
+                                                    key={e.id}
+                                                    onClick={() => selectEvent(e)}
+                                                    className={`w-full text-left px-4 py-3 text-sm hover:bg-white/5 transition-all border-b border-white/5 last:border-0 ${eventId === e.id ? "text-purple-400 bg-purple-500/5" : "text-zinc-300"}`}
+                                                >
+                                                    <div className="font-medium">{e.title}</div>
+                                                    <div className="text-xs text-zinc-500 mt-0.5">{e._count?.registrations || 0} registrations</div>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Export CSV Button */}
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={exportToCSV}
+                                disabled={registrations.length === 0 || loading}
+                                className="flex items-center gap-2 border-purple-500/30 text-purple-400 hover:bg-purple-500/10"
+                            >
+                                <Download className="h-4 w-4" />
+                                Export CSV
+                            </Button>
+                        </div>
                     </div>
                 </FadeIn>
 
@@ -225,6 +261,7 @@ export default function ParticipantsPage() {
                                         <th className="px-4 py-3 text-xs font-medium text-zinc-400 uppercase tracking-wider hidden lg:table-cell">LinkedIn</th>
                                         <th className="px-4 py-3 text-xs font-medium text-zinc-400 uppercase tracking-wider hidden xl:table-cell">Bio</th>
                                         <th className="px-4 py-3 text-xs font-medium text-zinc-400 uppercase tracking-wider">Status</th>
+                                        <th className="px-4 py-3 text-xs font-medium text-zinc-400 uppercase tracking-wider">Checked In</th>
                                         <th className="px-4 py-3 text-xs font-medium text-zinc-400 uppercase tracking-wider text-right">Actions</th>
                                     </tr>
                                 </thead>
@@ -304,10 +341,16 @@ export default function ParticipantsPage() {
                                                 {/* Status */}
                                                 <td className="px-4 py-3.5">
                                                     {statusBadge(reg.status)}
-                                                    {participant?.isPresent && (
-                                                        <Badge variant="success" className="ml-1.5 text-[10px]">
+                                                </td>
+
+                                                {/* Checked In */}
+                                                <td className="px-4 py-3.5">
+                                                    {participant?.isPresent ? (
+                                                        <Badge variant="success" className="text-[10px]">
                                                             ✅ Present
                                                         </Badge>
+                                                    ) : (
+                                                        <span className="text-xs text-zinc-600">—</span>
                                                     )}
                                                 </td>
 
