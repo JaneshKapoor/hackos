@@ -33,7 +33,10 @@ export default function ScanPage() {
     const [scannerInstance, setScannerInstance] = useState<any>(null);
     const [cancelCheckinTarget, setCancelCheckinTarget] = useState<{ pid: string; name: string } | null>(null);
     const [showSuggestions, setShowSuggestions] = useState(false);
+    const [showOverlay, setShowOverlay] = useState(false);
     const searchRef = useRef<HTMLDivElement>(null);
+    const lastScannedRef = useRef<string>("");
+    const scanCooldownRef = useRef<number>(0);
 
     // Compute search suggestions from loaded participants
     const searchSuggestions = useMemo(() => {
@@ -206,14 +209,39 @@ export default function ScanPage() {
     const handleScan = async (data: string) => {
         const token = data.split("/qr/").pop() || data;
         if (!token) return;
+
+        // Debounce: ignore the same QR code within 5 seconds
+        const now = Date.now();
+        if (token === lastScannedRef.current && now - scanCooldownRef.current < 5000) {
+            return;
+        }
+        lastScannedRef.current = token;
+        scanCooldownRef.current = now;
+
         try {
             const res = await fetch(`/api/qr?token=${token}`);
             if (res.ok) {
                 const participant = await res.json();
                 setScannedParticipant(participant);
+                setShowOverlay(true);
                 playSuccessSound();
+                // Pause scanner so it doesn't keep firing
+                if (scannerInstance) {
+                    try { await scannerInstance.pause(true); } catch { }
+                }
             }
         } catch { }
+    };
+
+    // Close overlay and resume scanning
+    const closeOverlay = async () => {
+        setShowOverlay(false);
+        setScannedParticipant(null);
+        lastScannedRef.current = "";
+        // Resume scanner if it was paused
+        if (scannerInstance && isScanning) {
+            try { await scannerInstance.resume(); } catch { }
+        }
     };
 
     const handleSearch = async (e: React.FormEvent) => {
@@ -487,23 +515,156 @@ export default function ScanPage() {
                         </Card>
                     </div>
 
-                    {/* Right Column: Scanned Participant Details */}
-                    <AnimatePresence mode="wait">
-                        {scannedParticipant ? (
+                    {/* Right Column: Desktop only — placeholder when no participant */}
+                    <div className="hidden lg:block">
+                        <AnimatePresence mode="wait">
+                            {scannedParticipant ? (
+                                <motion.div
+                                    key={scannedParticipant.id}
+                                    initial={{ opacity: 0, scale: 0.95 }}
+                                    animate={{ opacity: 1, scale: 1 }}
+                                    exit={{ opacity: 0, scale: 0.95 }}
+                                >
+                                    <Card className="bg-[#111111] border-white/10 relative overflow-hidden">
+                                        <AnimatePresence>
+                                            {showSuccess && (
+                                                <motion.div
+                                                    initial={{ opacity: 0 }}
+                                                    animate={{ opacity: 1 }}
+                                                    exit={{ opacity: 0 }}
+                                                    className="absolute inset-0 z-10 bg-emerald-500/20 backdrop-blur-sm flex items-center justify-center"
+                                                >
+                                                    <motion.div
+                                                        initial={{ scale: 0 }}
+                                                        animate={{ scale: 1 }}
+                                                        className="text-2xl font-bold text-emerald-400"
+                                                    >
+                                                        {showSuccess}
+                                                    </motion.div>
+                                                </motion.div>
+                                            )}
+                                        </AnimatePresence>
+
+                                        <CardHeader>
+                                            <div className="flex items-start justify-between">
+                                                <CardTitle>Participant Details</CardTitle>
+                                                <Button variant="ghost" size="icon" onClick={closeOverlay}>
+                                                    <X className="h-4 w-4" />
+                                                </Button>
+                                            </div>
+                                        </CardHeader>
+                                        <CardContent className="space-y-6">
+                                            <div className="flex items-center gap-4">
+                                                <div className="w-16 h-16 rounded-full bg-gradient-to-br from-purple-500 to-cyan-500 flex items-center justify-center text-2xl font-bold shrink-0">
+                                                    {scannedParticipant.user?.name?.[0] || "?"}
+                                                </div>
+                                                <div>
+                                                    <h3 className="text-xl font-semibold">{scannedParticipant.user?.name}</h3>
+                                                    <p className="text-sm text-zinc-400">{scannedParticipant.user?.email}</p>
+                                                    {scannedParticipant.registration?.teamName && (
+                                                        <span className="text-xs text-cyan-400">Team: {scannedParticipant.registration.teamName}</span>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            <div className="flex flex-wrap gap-2">
+                                                <Badge variant={scannedParticipant.registration?.status === "APPROVED" ? "success" : "warning"}>
+                                                    {scannedParticipant.registration?.status}
+                                                </Badge>
+                                                <Badge variant={scannedParticipant.isPresent ? "success" : "secondary"}>
+                                                    {scannedParticipant.isPresent ? "✅ Present" : "Not checked in"}
+                                                </Badge>
+                                                <Badge variant={scannedParticipant.goodieReceived ? "success" : "secondary"}>
+                                                    {scannedParticipant.goodieReceived ? "🎁 Goodie received" : "No goodie yet"}
+                                                </Badge>
+                                            </div>
+
+                                            <div className="space-y-3">
+                                                <Button
+                                                    variant="gradient"
+                                                    className="w-full"
+                                                    onClick={() => markPresent()}
+                                                    disabled={actionLoading === `checkin-${scannedParticipant.id}` || scannedParticipant.isPresent}
+                                                >
+                                                    {actionLoading === `checkin-${scannedParticipant.id}` ? (
+                                                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                                    ) : (
+                                                        <UserCheck className="h-4 w-4 mr-2" />
+                                                    )}
+                                                    {scannedParticipant.isPresent ? "Already Checked In" : "Mark Present ✅"}
+                                                </Button>
+
+                                                <div className="grid grid-cols-2 gap-3">
+                                                    {["Goodie Pack", "T-Shirt", "Stickers", "Laptop Bag"].map((item) => (
+                                                        <Button
+                                                            key={item}
+                                                            variant="outline"
+                                                            onClick={() => markGoodie(item)}
+                                                            disabled={actionLoading === "goodie"}
+                                                        >
+                                                            <Gift className="h-4 w-4 mr-2" />
+                                                            {item}
+                                                        </Button>
+                                                    ))}
+                                                </div>
+                                            </div>
+
+                                            {scannedParticipant.goodieLogs?.length > 0 && (
+                                                <div>
+                                                    <p className="text-sm text-zinc-400 mb-2">Previously Given:</p>
+                                                    <div className="flex flex-wrap gap-2">
+                                                        {scannedParticipant.goodieLogs.map((log: any, i: number) => (
+                                                            <Badge key={i} variant="secondary">
+                                                                {log.item} · {new Date(log.givenAt).toLocaleTimeString()}
+                                                            </Badge>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </CardContent>
+                                    </Card>
+                                </motion.div>
+                            ) : (
+                                <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                                    <Card className="bg-[#111111] border-white/5 h-full flex items-center justify-center min-h-[300px]">
+                                        <CardContent className="text-center py-12">
+                                            <User className="h-16 w-16 text-zinc-600 mx-auto mb-4" />
+                                            <p className="text-zinc-400 text-lg mb-1">No participant selected</p>
+                                            <p className="text-zinc-500 text-sm">
+                                                Scan a QR code, search above, or click a participant below
+                                            </p>
+                                        </CardContent>
+                                    </Card>
+                                </motion.div>
+                            )}
+                        </AnimatePresence>
+                    </div>
+
+                    {/* Mobile Full-Screen Overlay for Scanned Participant */}
+                    <AnimatePresence>
+                        {showOverlay && scannedParticipant && (
                             <motion.div
-                                key={scannedParticipant.id}
-                                initial={{ opacity: 0, scale: 0.95 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                exit={{ opacity: 0, scale: 0.95 }}
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                className="lg:hidden fixed inset-0 z-50 flex items-center justify-center p-4"
                             >
-                                <Card className="bg-[#111111] border-white/10 relative overflow-hidden">
+                                <div className="absolute inset-0 bg-black/80 backdrop-blur-md" onClick={closeOverlay} />
+                                <motion.div
+                                    initial={{ scale: 0.85, opacity: 0, y: 40 }}
+                                    animate={{ scale: 1, opacity: 1, y: 0 }}
+                                    exit={{ scale: 0.85, opacity: 0, y: 40 }}
+                                    transition={{ type: "spring", damping: 25, stiffness: 300 }}
+                                    className="relative bg-[#111111] border border-purple-500/20 rounded-2xl w-full max-w-sm max-h-[85vh] overflow-y-auto shadow-2xl"
+                                >
+                                    {/* Success flash */}
                                     <AnimatePresence>
                                         {showSuccess && (
                                             <motion.div
                                                 initial={{ opacity: 0 }}
                                                 animate={{ opacity: 1 }}
                                                 exit={{ opacity: 0 }}
-                                                className="absolute inset-0 z-10 bg-emerald-500/20 backdrop-blur-sm flex items-center justify-center"
+                                                className="absolute inset-0 z-10 bg-emerald-500/20 backdrop-blur-sm flex items-center justify-center rounded-2xl"
                                             >
                                                 <motion.div
                                                     initial={{ scale: 0 }}
@@ -516,21 +677,22 @@ export default function ScanPage() {
                                         )}
                                     </AnimatePresence>
 
-                                    <CardHeader>
+                                    <div className="p-6 space-y-5">
+                                        {/* Header */}
                                         <div className="flex items-start justify-between">
-                                            <CardTitle>Participant Details</CardTitle>
-                                            <Button variant="ghost" size="icon" onClick={() => setScannedParticipant(null)}>
-                                                <X className="h-4 w-4" />
+                                            <h3 className="text-lg font-bold">Participant Details</h3>
+                                            <Button variant="ghost" size="icon" onClick={closeOverlay} className="-mt-1 -mr-2">
+                                                <X className="h-5 w-5" />
                                             </Button>
                                         </div>
-                                    </CardHeader>
-                                    <CardContent className="space-y-6">
+
+                                        {/* Participant info */}
                                         <div className="flex items-center gap-4">
-                                            <div className="w-16 h-16 rounded-full bg-gradient-to-br from-purple-500 to-cyan-500 flex items-center justify-center text-2xl font-bold shrink-0">
+                                            <div className="w-14 h-14 rounded-full bg-gradient-to-br from-purple-500 to-cyan-500 flex items-center justify-center text-xl font-bold shrink-0">
                                                 {scannedParticipant.user?.name?.[0] || "?"}
                                             </div>
                                             <div>
-                                                <h3 className="text-xl font-semibold">{scannedParticipant.user?.name}</h3>
+                                                <h3 className="text-lg font-semibold">{scannedParticipant.user?.name}</h3>
                                                 <p className="text-sm text-zinc-400">{scannedParticipant.user?.email}</p>
                                                 {scannedParticipant.registration?.teamName && (
                                                     <span className="text-xs text-cyan-400">Team: {scannedParticipant.registration.teamName}</span>
@@ -538,6 +700,7 @@ export default function ScanPage() {
                                             </div>
                                         </div>
 
+                                        {/* Badges */}
                                         <div className="flex flex-wrap gap-2">
                                             <Badge variant={scannedParticipant.registration?.status === "APPROVED" ? "success" : "warning"}>
                                                 {scannedParticipant.registration?.status}
@@ -550,62 +713,63 @@ export default function ScanPage() {
                                             </Badge>
                                         </div>
 
+                                        {/* Actions */}
                                         <div className="space-y-3">
                                             <Button
                                                 variant="gradient"
-                                                className="w-full"
+                                                className="w-full h-12 text-base"
                                                 onClick={() => markPresent()}
                                                 disabled={actionLoading === `checkin-${scannedParticipant.id}` || scannedParticipant.isPresent}
                                             >
                                                 {actionLoading === `checkin-${scannedParticipant.id}` ? (
-                                                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                                                    <Loader2 className="h-5 w-5 animate-spin mr-2" />
                                                 ) : (
-                                                    <UserCheck className="h-4 w-4 mr-2" />
+                                                    <UserCheck className="h-5 w-5 mr-2" />
                                                 )}
                                                 {scannedParticipant.isPresent ? "Already Checked In" : "Mark Present ✅"}
                                             </Button>
 
-                                            <div className="grid grid-cols-2 gap-3">
+                                            <div className="grid grid-cols-2 gap-2">
                                                 {["Goodie Pack", "T-Shirt", "Stickers", "Laptop Bag"].map((item) => (
                                                     <Button
                                                         key={item}
                                                         variant="outline"
+                                                        size="sm"
                                                         onClick={() => markGoodie(item)}
                                                         disabled={actionLoading === "goodie"}
                                                     >
-                                                        <Gift className="h-4 w-4 mr-2" />
+                                                        <Gift className="h-3.5 w-3.5 mr-1.5" />
                                                         {item}
                                                     </Button>
                                                 ))}
                                             </div>
                                         </div>
 
+                                        {/* Goodie history */}
                                         {scannedParticipant.goodieLogs?.length > 0 && (
                                             <div>
-                                                <p className="text-sm text-zinc-400 mb-2">Previously Given:</p>
-                                                <div className="flex flex-wrap gap-2">
+                                                <p className="text-xs text-zinc-400 mb-2">Previously Given:</p>
+                                                <div className="flex flex-wrap gap-1.5">
                                                     {scannedParticipant.goodieLogs.map((log: any, i: number) => (
-                                                        <Badge key={i} variant="secondary">
+                                                        <Badge key={i} variant="secondary" className="text-[10px]">
                                                             {log.item} · {new Date(log.givenAt).toLocaleTimeString()}
                                                         </Badge>
                                                     ))}
                                                 </div>
                                             </div>
                                         )}
-                                    </CardContent>
-                                </Card>
-                            </motion.div>
-                        ) : (
-                            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                                <Card className="bg-[#111111] border-white/5 h-full flex items-center justify-center min-h-[300px]">
-                                    <CardContent className="text-center py-12">
-                                        <User className="h-16 w-16 text-zinc-600 mx-auto mb-4" />
-                                        <p className="text-zinc-400 text-lg mb-1">No participant selected</p>
-                                        <p className="text-zinc-500 text-sm">
-                                            Scan a QR code, search above, or click a participant below
-                                        </p>
-                                    </CardContent>
-                                </Card>
+
+                                        {/* Scan Next button */}
+                                        <Button
+                                            variant="outline"
+                                            className="w-full border-white/10"
+                                            onClick={closeOverlay}
+                                        >
+                                            <ScanLine className="h-4 w-4 mr-2" />
+                                            Scan Next Participant
+                                        </Button>
+                                    </div>
+                                </motion.div>
                             </motion.div>
                         )}
                     </AnimatePresence>
