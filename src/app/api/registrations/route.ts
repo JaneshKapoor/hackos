@@ -20,6 +20,15 @@ export async function GET(request: Request) {
             where.status = status;
         }
 
+        // Push search filtering into the database query
+        if (search) {
+            where.OR = [
+                { teamLead: { name: { contains: search, mode: "insensitive" } } },
+                { teamLead: { email: { contains: search, mode: "insensitive" } } },
+                { teamName: { contains: search, mode: "insensitive" } },
+            ];
+        }
+
         const registrations = await prisma.registration.findMany({
             where,
             include: {
@@ -46,19 +55,7 @@ export async function GET(request: Request) {
             orderBy: { createdAt: "desc" },
         });
 
-        // Client-side search filter (for simplicity)
-        let filtered = registrations;
-        if (search) {
-            const s = search.toLowerCase();
-            filtered = registrations.filter(
-                (r) =>
-                    r.teamLead?.name?.toLowerCase().includes(s) ||
-                    r.teamLead?.email?.toLowerCase().includes(s) ||
-                    r.teamName?.toLowerCase().includes(s)
-            );
-        }
-
-        return NextResponse.json(filtered);
+        return NextResponse.json(registrations);
     } catch (error) {
         console.error("Fetch registrations error:", error);
         return NextResponse.json({ error: "Failed to fetch" }, { status: 500 });

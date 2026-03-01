@@ -4,18 +4,18 @@ import { authOptions } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 import { slugify } from "@/lib/utils";
 
-// GET: Fetch events with full stats
+// GET: Fetch events with full stats (optimized with aggregations)
 export async function GET() {
     try {
         const session = await getServerSession(authOptions);
         const userId = (session?.user as any)?.id;
 
         const where: any = { isPublished: true };
-        // If host, show their events; otherwise show all published
         if (userId && (session?.user as any)?.role === "HOST") {
             where.hostId = userId;
         }
 
+        // Fetch events with only counts — no raw registration rows
         const events = await prisma.event.findMany({
             where,
             include: {
@@ -25,14 +25,6 @@ export async function GET() {
                         submissions: true,
                     },
                 },
-                registrations: {
-                    select: {
-                        status: true,
-                        participants: {
-                            select: { isPresent: true },
-                        },
-                    },
-                },
                 host: {
                     select: { name: true, email: true },
                 },
@@ -40,21 +32,75 @@ export async function GET() {
             orderBy: { startDate: "desc" },
         });
 
-        // Compute stats for each event
+        const eventIds = events.map((e) => e.id);
+
+        // Single aggregation query: count registrations grouped by eventId + status
+        const statusCounts = await prisma.registration.groupBy({
+            by: ["eventId", "status"],
+            where: { eventId: { in: eventIds } },
+            _count: true,
+        });
+
+        // Count checked-in participants per event
+        const checkedInCounts = await prisma.participant.groupBy({
+            by: ["registrationId"],
+            where: {
+                isPresent: true,
+                registration: { eventId: { in: eventIds } },
+            },
+            _count: true,
+        });
+
+        // Map checked-in counts back to events
+        const registrationsForCheckin = checkedInCounts.length > 0
+            ? await prisma.registration.findMany({
+                where: { id: { in: checkedInCounts.map((c) => c.registrationId) } },
+                select: { id: true, eventId: true },
+            })
+            : [];
+
+        const regToEvent = new Map(registrationsForCheckin.map((r) => [r.id, r.eventId]));
+        const checkedInByEvent = new Map<string, number>();
+        for (const c of checkedInCounts) {
+            const eid = regToEvent.get(c.registrationId);
+            if (eid) checkedInByEvent.set(eid, (checkedInByEvent.get(eid) || 0) + c._count);
+        }
+
+        // Count teams (registrations with >1 participant) per event
+        const teamCounts = await prisma.registration.findMany({
+            where: { eventId: { in: eventIds } },
+            select: {
+                eventId: true,
+                _count: { select: { participants: true } },
+            },
+        });
+
+        const teamsByEvent = new Map<string, number>();
+        for (const t of teamCounts) {
+            if (t._count.participants > 1) {
+                teamsByEvent.set(t.eventId, (teamsByEvent.get(t.eventId) || 0) + 1);
+            }
+        }
+
+        // Build stats lookup
+        const statsMap = new Map<string, { approved: number; pending: number }>();
+        for (const sc of statusCounts) {
+            const existing = statsMap.get(sc.eventId) || { approved: 0, pending: 0 };
+            if (sc.status === "APPROVED") existing.approved = sc._count;
+            if (sc.status === "PENDING") existing.pending = sc._count;
+            statsMap.set(sc.eventId, existing);
+        }
+
         const eventsWithStats = events.map((event) => {
-            const approved = event.registrations.filter((r) => r.status === "APPROVED").length;
-            const pending = event.registrations.filter((r) => r.status === "PENDING").length;
-            const checkedIn = event.registrations.reduce(
-                (acc, r) => acc + r.participants.filter((p) => p.isPresent).length, 0
-            );
-            const teams = event.registrations.filter((r) => r.participants.length > 1).length;
-
-            // Remove raw registrations from response to keep it clean
-            const { registrations, ...rest } = event;
-
+            const s = statsMap.get(event.id) || { approved: 0, pending: 0 };
             return {
-                ...rest,
-                stats: { approved, pending, checkedIn, teams },
+                ...event,
+                stats: {
+                    approved: s.approved,
+                    pending: s.pending,
+                    checkedIn: checkedInByEvent.get(event.id) || 0,
+                    teams: teamsByEvent.get(event.id) || 0,
+                },
             };
         });
 
