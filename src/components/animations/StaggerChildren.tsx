@@ -44,7 +44,8 @@ export function StaggerChildren({
         <motion.div
             variants={containerVariants}
             initial="hidden"
-            animate="show"
+            whileInView="show"
+            viewport={{ once: true }}
             custom={{ staggerDelay, initialDelay }}
             className={className}
             {...props}

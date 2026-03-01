@@ -81,7 +81,8 @@ export default function HomePage() {
                         <div className="absolute inset-0 bg-gradient-to-r from-purple-600/20 via-cyan-500/20 to-purple-600/20 blur-3xl" />
                         <motion.div
                             initial={{ opacity: 0, y: 40 }}
-                            animate={{ opacity: 1, y: 0 }}
+                            whileInView={{ opacity: 1, y: 0 }}
+                            viewport={{ once: true }}
                             transition={{ delay: 0.5, duration: 0.8 }}
                             className="relative"
                         >
@@ -99,7 +100,8 @@ export default function HomePage() {
                                             <motion.div
                                                 key={stat.label}
                                                 initial={{ opacity: 0, scale: 0.8 }}
-                                                animate={{ opacity: 1, scale: 1 }}
+                                                whileInView={{ opacity: 1, scale: 1 }}
+                                                viewport={{ once: true }}
                                                 transition={{ delay: 0.7 + i * 0.1, duration: 0.4 }}
                                                 className="text-center p-4 rounded-lg border border-white/5 bg-white/[0.02]"
                                             >
